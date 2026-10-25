@@ -1,0 +1,74 @@
+# 复制为 config.yaml 后填写；此示例不包含可用的账号、密钥或代理节点。
+# 管理员是下列 QQ 号，不等同于 QQ 群管理头衔。
+admin_qq: []
+target_group_ids: [123456789]  # 占位号；请替换，否则程序拒绝启动。
+napcat:
+  ws_url: ws://127.0.0.1:5098
+  api_http_url: http://127.0.0.1:3000
+  access_token: ""           # 与 OneBot WS 服务端一致
+  api_http_token: ""         # 与 OneBot HTTP 服务端一致
+
+# deepseek 是历史遗留的通用聊天配置名，并不限定模型品牌。
+deepseek:
+  enabled: false
+  api_key: ""
+  endpoint: https://api.example.com/v1
+  model: YOUR_MODEL
+  system_prompt: 你是一个友善、准确的聊天助手。
+  max_history: 20
+  trigger_groups: []         # 留空表示不限制群；填写希望使用的群号。
+  trigger_private: false
+llm_providers:
+  example:
+    enabled: false
+    endpoint: https://api.example.com/v1
+    api_key: ""
+    models: [YOUR_MODEL]
+current_provider: example
+current_model: YOUR_MODEL
+
+# 视觉同步关闭时使用此独立配置；开启后跟随主模型（需支持图片输入）。
+qwen_vl:
+  enabled: false
+  endpoint: https://api.example.com/v1
+  api_key: ""
+  model: YOUR_VISION_MODEL
+
+image_download:
+  proxy_only: true
+  # 可选，仅覆盖图片下载；请先准备一个本地 HTTP 代理，再取消下行注释。
+  # image_proxy_url: http://127.0.0.1:18092
+  # 没有覆盖项时读取环境 HTTP 代理；严格模式下不回落直连。
+
+proactive:
+  enabled: true              # 允许管理员在指定群开启；初始各群仍未开启。
+  groups: []
+  daily_limit: 24
+  quiet_start: 23
+  quiet_end: 8
+  images_enabled: true
+  ignore_user_ids: []         # 可添加其他忽略账号；官方Q群管家始终排除。
+paper_reader:
+  auto_read:
+    enabled: true            # 还需在群内开启主动模式和主动阅读。
+long_term_memory:
+  enabled: true
+whale_stickers:
+  enabled: true
+bilibili:
+  enabled: false             # 先配置并验收，再开启和登录。
+serper_api_key: ""
+saucenao:
+  enabled: false
+  api_key: ""
+auto_reply:
+  enabled: false
+  groups: []
+  rules: []
+welcome:
+  enabled: false
+  groups: []
+  message: 欢迎加入。
+schedule: []
+messages_file: messages.txt
+heartbeat_interval: 30
