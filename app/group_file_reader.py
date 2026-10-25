@@ -11,7 +11,7 @@ _READ = re.compile(r'提要|摘要|概括|总结|梗概|简明介绍|读一(?:�
 
 def normalized(value):
     value = unicodedata.normalize('NFKC', str(value)).translate(_COMMON).casefold()
-    value = re.sub(r'\.(?:pdf|txt|md|markdown)\b', '', value)
+    value = re.sub(r'\.(?:pdf|txt|md|markdown|docx|doc)\b', '', value)
     return ''.join(c for c in value if c.isalnum())
 
 

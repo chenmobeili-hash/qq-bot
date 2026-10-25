@@ -45,12 +45,13 @@ def cleanup(directory, now=None):
         raise MediaError('媒体临时目录不能是符号链接')
     cutoff = (time.time() if now is None else now) - 3600
     for child in list(directory.iterdir())[:128]:
-        if child.is_symlink() or not child.is_dir() or not re.fullmatch(r'(?:webp|video)-[\w-]{6,}', child.name):
+        if child.is_symlink() or not child.is_dir() or not re.fullmatch(r'(?:webp|video|audio)-[\w-]{6,}', child.name):
             continue
         if child.stat().st_mtime > cutoff:
             continue
         for path in child.iterdir():
-            if path.name in ('input.webp', 'input.mp4', 'input.mkv', 'input.avi', 'input.flv') and path.is_file() and path.stat().st_mtime <= cutoff:
+            if (path.name in ('input.webp', 'input.mp4', 'input.mkv', 'input.avi', 'input.flv', 'input.mp3', 'input.wav', 'input.aac', 'input.flac', 'input.ogg', 'input.amr')
+                    or re.fullmatch(r'chunk-\d{3}\.mp3', path.name)) and path.is_file() and not path.is_symlink() and path.stat().st_mtime <= cutoff:
                 path.unlink()
         try:
             child.rmdir()
@@ -152,7 +153,7 @@ def video_format(body):
     raise MediaError('仅支持真实MP4/MOV、WebM/MKV或AVI视频；不会把封面当作视频')
 
 
-async def capture_video(body, directory, *, frame_limit=MAX_FRAMES):
+async def capture_video(body, directory, *, frame_limit=MAX_FRAMES, include_audio=False):
     if not body or len(body) > MAX_VIDEO_BYTES:
         raise MediaError('视频为空或超过64MB，请截取较短片段')
     format_name, suffix = video_format(body)
@@ -200,7 +201,16 @@ async def capture_video(body, directory, *, frame_limit=MAX_FRAMES):
                 frames.append({'second': moment, 'base64': base64.b64encode(jpeg).decode('ascii')})
             if not frames:
                 raise MediaError('视频没有解码出有效画面')
-            return {'kind': 'QQ视频', 'duration': duration, 'frames': frames}
+            result = {'kind': 'QQ视频', 'duration': duration, 'frames': frames}
+            if include_audio:
+                import audio_reader
+                try:
+                    result.update(await audio_reader.chunks_from_path(path, format_name, temporary))
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    result.update(audio_chunks=[], audio_status='音轨提取未完成，未读取声音')
+            return result
 
 
 if __name__ == '__main__':

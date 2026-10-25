@@ -63,3 +63,5 @@ venv/
 .pytest_cache/
 .DS_Store
 Thumbs.db
+hearing_sync_state.json
+hearing_sync_state.tmp

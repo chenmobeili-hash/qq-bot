@@ -20,8 +20,8 @@ MAX_BYTES = 64 * 1024 * 1024
 MAX_CHARS = 240_000
 MAX_PAGES = 100
 CONTEXT_CHARS = 24_000
-EXTENSIONS = {".pdf", ".txt", ".md", ".markdown"}
-HELP = ("群里读文献：先上传 PDF/TXT/Markdown，再 @我 读文献；也可以先 @我 读文献，再上传。\n"
+EXTENSIONS = {".pdf", ".txt", ".md", ".markdown", ".docx", ".doc"}
+HELP = ("群里读文献：先上传 PDF/TXT/Markdown/DOCX（旧DOC需antiword），再 @我 读文献；也可以先 @我 读文献，再上传。\n"
         "自主挑选：@我 挑一份你感兴趣的文档读，从本群文件挑一篇后阅读。\n"
         "链接：@我 读文献 https://arxiv.org/abs/1706.03762 解释方法与局限\n"
         "追问：@我 文献追问 实验如何设计？\n状态：@我 文献状态；清除：@我 忘记文献。\n"
@@ -169,9 +169,19 @@ def extract_document(body, filename, source="群文件"):
         kind = "PDF文字；未识别图表画面"
     else:
         if suffix not in EXTENSIONS and suffix not in (".html", ".htm"):
-            raise PaperError("支持 PDF、TXT、Markdown，或公开论文网页。")
-        text = decode_text(body)
-        kind = "文字文件"
+            raise PaperError("支持 PDF、TXT、Markdown、Word DOCX（旧DOC需antiword），或公开论文网页。")
+        word_truncated = False
+        if suffix in ('.docx', '.doc'):
+            import word_reader
+            try:
+                text = word_reader.extract(body, suffix)
+                word_truncated = len(text) >= word_reader.TEXT_LIMIT
+            except word_reader.WordError as exc:
+                raise PaperError(str(exc)) from None
+            kind = 'Word正文及表格文字；按段定位，未识别图片图表；未还原Word分页'
+        else:
+            text = decode_text(body)
+            kind = "文字文件"
         if suffix in (".html", ".htm"):
             parser = PaperHTML()
             parser.feed(text)
@@ -179,7 +189,7 @@ def extract_document(body, filename, source="群文件"):
             text = "".join(parser.parts)
             kind = "网页可见文字，不保证论文全文"
         text = re.sub(r"\n{3,}", "\n\n", text).strip()
-        truncated = len(text) > MAX_CHARS
+        truncated = word_truncated or len(text) > MAX_CHARS
         text = text[:MAX_CHARS]
         units = [{"label": f"段{i // 1800 + 1}", "text": text[i:i + 1800]}
                  for i in range(0, len(text), 1800)]

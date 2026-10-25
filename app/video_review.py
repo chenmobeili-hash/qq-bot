@@ -57,10 +57,10 @@ def coverage(result, state):
     source = ('；源动画共' + str(result['frames_total']) + '帧' if result.get('frames_total') else '')
     return (str(result.get('kind', '视频')) + '：已抽取' + str(len(frames)) + '张，模型实际查看'
             + str(len(seen)) + '张' + source + '；约' + str(round(result.get('duration', 0), 2))
-            + '秒。已看时间点（秒）：' + times + '。仅为采样，未读取音轨，也未完整观看。')
+            + '秒。已看时间点（秒）：' + times + ('。画面仅为采样；声音范围见听觉结果，未完整观看。' if state.get('hearing', {}).get('notes') else '。仅为采样，未读取音轨，也未完整观看。'))
 
 
-async def review(bot, result, config, question='', state=None):
+async def _visual_review(bot, result, config, question='', state=None):
     state = state if state is not None else {}
     frames = result.get('frames', [])[:FRAME_LIMIT]
     if not frames:
@@ -70,8 +70,9 @@ async def review(bot, result, config, question='', state=None):
         raise MediaError('视觉模型未启用，请先配置视觉模型或开启视觉同步')
     route = bot._vision_route_signature(config)
     if state.get('route') != route:
+        audio_state = state.get('hearing', {})
         state.clear()
-        state.update(route=route, seen=[], notes=[])
+        state.update(route=route, seen=[], notes=[], hearing=audio_state)
     deadline = time.monotonic() + ROUND_SECONDS
     warning = ''
     for _ in range(ROUND_PAGES):
@@ -91,7 +92,8 @@ async def review(bot, result, config, question='', state=None):
                     '尚未看时间点': [f['second'] for i, f in enumerate(frames)
                                 if i not in state['seen'] and i not in selected],
                     '此前已看笔记': state['notes'][-3:],
-                    '字幕资料': str(result.get('subtitle', ''))[:12000]}
+                    '字幕资料': str(result.get('subtitle', ''))[:12000],
+                    '实际听觉笔记': state.get('hearing', {}).get('notes', [])[-3:]}
         parts = [{'type': 'text', 'text': json.dumps(metadata, ensure_ascii=False)}]
         for i in selected:
             parts.extend([{'type': 'text', 'text': '采样定位约：' + str(frames[i]['second']) + '秒'},
@@ -130,6 +132,37 @@ async def review(bot, result, config, question='', state=None):
     return coverage(result, state) + '\n' + '\n'.join(state['notes']) + '\n' + warning + tail
 
 
+async def review(bot, result, config, question='', state=None, group=None):
+    import hearing
+    group = config.get('_media_group') if group is None else group
+    state = state if state is not None else {}
+    audio, warning = '', ''
+    if result.get('audio_chunks'):
+        if hearing.allowed(bot, config, group):
+            try:
+                audio = await hearing.review(bot, result, config, question, state.setdefault('hearing', {}), group)
+            except asyncio.CancelledError:
+                raise
+            except MediaError as exc:
+                if '已变化' in str(exc):
+                    raise
+                warning = '声音未读取成功：' + str(exc)
+    elif result.get('audio_status'):
+        warning = result['audio_status']
+    qv = bot._effective_vision_config(config)
+    if not qv.get('enabled') and audio:
+        return '未启用画面识别；以下仅为实际听觉结果。\n' + audio
+    try:
+        visual = await _visual_review(bot, result, config, question, state)
+    except (asyncio.CancelledError, RouteChanged):
+        raise
+    except Exception:
+        if audio:
+            return '画面识别未完成；以下仅为实际听觉结果。\n' + audio
+        raise
+    return visual + ('\n' + audio if audio else '') + ('\n' + warning if warning else '')
+
+
 class ReviewCache:
     """RAM-only JPEG banks; fixed one-hour TTL, bounded globally, no raw videos."""
     def __init__(self, clock=time.monotonic, limit=32 * 1024 * 1024):
@@ -145,7 +178,7 @@ class ReviewCache:
 
     def put(self, key, result, state=None):
         self.prune()
-        size = sum(len(f['base64']) for f in result.get('frames', []))
+        size = sum(len(f['base64']) for f in result.get('frames', [])) + sum(len(c['base64']) for c in result.get('audio_chunks', []))
         if size > self.limit:
             raise MediaError('采样画面缓存超过上限，请缩短视频')
         self.rows.pop(key, None)

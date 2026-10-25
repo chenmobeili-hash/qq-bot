@@ -40,13 +40,19 @@ async def download(url):
     raise media_reader.MediaError('视频流重定向过多')
 
 
-async def capture_frames(account, bvid, cid, duration, directory):
+async def capture_media(account, bvid, cid, duration, directory, *, include_audio=False):
     media, _ = await account.request('api.bilibili.com', '/x/player/playurl',
         params={'bvid': bvid, 'cid': cid, 'qn': 16, 'fnval': 0, 'platform': 'html5'}, cookies=account.cookies())
     segments = media.get('durl') or []
     if len(segments) != 1:
-        return [], '未取得单段可读取的媒体流，未抽帧'
+        raise media_reader.MediaError('未取得单段可读取的媒体流，未抽帧或读取声音')
     body = await download(media_url(segments[0].get('url', '')))
-    result = await media_reader.capture_video(body, directory, frame_limit=40)
+    if include_audio:
+        return await media_reader.capture_video(body, directory, frame_limit=40, include_audio=True)
+    return await media_reader.capture_video(body, directory, frame_limit=40)
+
+
+async def capture_frames(account, bvid, cid, duration, directory):
+    result = await capture_media(account, bvid, cid, duration, directory)
     frames = result['frames']
     return frames, ('实际抽取' + str(len(frames)) + '张视频采样；需视觉模型分批查看后才计为已看，未读取音轨')

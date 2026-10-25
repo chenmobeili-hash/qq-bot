@@ -53,6 +53,7 @@ def instructions(key, config, admin):
             '操作：{"kind":"operation","reply":"自然确认问句","action":{"action":"操作ID","args":{}}}。'
             '需澄清：{"kind":"clarify","reply":"只询问缺少的信息","action":null}。'
             '只读查询：{"kind":"inspect","reply":"","action":{"action":"只读查询ID","args":{}}}。'
+            "用户想跟随主模型听音频可建议hearing_sync_on，取消跟随用hearing_sync_off；听最近上传的音频用audio_read，继续听用audio_more。"
             "reply必须是字符串，保持当前人格；不要在JSON外写文字、代码围栏或[[mechanism:标记。"
             "chat回答普通聊天和已有资料能回答的问题，action必须为null，不能声称已修改设置或完成未执行的操作。"
             "operation只提出白名单中的一项操作；程序核实实际参数、列出作用范围，用户确认后才执行。"

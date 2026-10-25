@@ -16,8 +16,11 @@ from yarl import URL
 
 import media_reader
 import video_review
+import hearing
+import audio_reader
 from image_network import ImageAddressError, ImageDoHResolver, validate_image_url
 
+AUDIO_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.opus', '.amr'}
 VIDEO_EXTENSIONS = {'.mp4', '.m4v', '.mov', '.webm', '.mkv', '.avi'}
 MEDIA_DOWNLOAD_SECONDS = 55.0
 MEDIA_PROXY_CONNECT_SECONDS = 5.0
@@ -198,11 +201,43 @@ def name(info):
 
 
 def supported(info):
-    return info.get('_kind') == 'video' or Path(name(info)).suffix.lower() in VIDEO_EXTENSIONS | {'.webp'}
+    return info.get('_kind') in ('video', 'record') or Path(name(info)).suffix.lower() in VIDEO_EXTENSIONS | AUDIO_EXTENSIONS | {'.webp'}
 
 
 def temp_root(bot):
     return bot.BASE_DIR / 'resources' / 'media_tmp'
+
+
+async def bridge_record_bytes(bot, location, limit):
+    """Only get_record's fresh reply can use an explicitly allowed local cache root."""
+    config = bot.load_config()
+    roots = (config.get('audio_input', {}) or {}).get('local_record_roots', [])
+    if not isinstance(roots, list) or not roots:
+        raise media_reader.MediaError('接入层只返回了本地语音路径；请管理员配置audio_input.local_record_roots，或改发音频文件')
+    path = Path(location)
+    if not path.is_absolute():
+        raise media_reader.MediaError('接入层语音路径不是有效绝对路径')
+    resolved = path.resolve()
+    permitted = False
+    for value in roots:
+        if not isinstance(value, str) or not Path(value).is_absolute():
+            continue
+        root = Path(value).resolve()
+        if root == Path(root.anchor):
+            continue
+        if resolved.is_relative_to(root) and resolved != root:
+            permitted = True
+            break
+    if not permitted or not resolved.is_file() or path.is_symlink():
+        raise media_reader.MediaError('语音转码文件不在允许的本地缓存目录内')
+    def read():
+        with resolved.open('rb') as stream:
+            body = stream.read(limit + 1)
+        if not body or len(body) > limit:
+            raise media_reader.MediaError('本地语音文件为空或超过上限')
+        audio_reader.audio_format(body)  # Never pass a non-media file to the model.
+        return body
+    return await asyncio.to_thread(read)
 
 
 async def describe_frames(bot, result, config):
@@ -265,6 +300,8 @@ class MediaController:
         review = self.reviews.get(key)
         if review:
             status['视频补看'] = video_review.coverage(review['result'], review['state'])
+            if review['result'].get('audio_chunks'):
+                status['听觉进度'] = hearing.coverage(review['result'], review['state'].get('hearing', {}))
             status['可用操作'] = 'video_more：补看本聊天本人尚未查看的采样；缓存自抽取起最多1小时'
         return status
 
@@ -281,6 +318,26 @@ class MediaController:
         location = info.get('url')
         if not location and str(info.get('file', '')).startswith(('https://', 'http://')):
             location = info['file']
+        if info.get('_kind') == 'record':
+            converted = await bot.call_api('get_record', {'file': str(info.get('file') or info.get('file_id') or ''), 'out_format': 'mp3'}, timeout=30)
+            if isinstance(converted, dict) and converted.get('base64'):
+                encoded = converted['base64']
+                if not isinstance(encoded, str) or len(encoded) > (limit + 2) // 3 * 4:
+                    raise media_reader.MediaError('转码后的语音超过上限')
+                try:
+                    decoded = base64.b64decode(encoded.removeprefix('base64://'), validate=True)
+                except ValueError:
+                    raise media_reader.MediaError('接入层返回了无效的语音数据') from None
+                if not decoded or len(decoded) > limit:
+                    raise media_reader.MediaError('转码后的语音为空或超过上限')
+                return decoded
+            if isinstance(converted, dict) and (converted.get('url') or str(converted.get('file', '')).startswith(('http://', 'https://'))):
+                location = converted.get('url') or converted['file']
+                size = 0  # Conversion changes byte length; never compare MP3 with original SILK size.
+            elif isinstance(converted, dict) and converted.get('file'):
+                return await bridge_record_bytes(bot, str(converted['file']), limit)
+            if not location:
+                raise media_reader.MediaError('接入层未提供可下载的语音MP3；请改发音频文件')
         if not location:
             file_id = info.get('file_id') or info.get('id') or info.get('file')
             if not file_id:
@@ -328,7 +385,7 @@ class MediaController:
             raise media_reader.MediaError('媒体下载长度与附件记录不一致，请重传')
         return body
 
-    async def read(self, data, question='', *, more=False):
+    async def read(self, data, question='', *, more=False, audio_only=False):
         bot = self.bot
         key = bot._mechanism_key(data)
         self.prune()
@@ -339,13 +396,20 @@ class MediaController:
             await bot.send_msg_to_user(data, config, '当前没有可补看的采样，可能已过1小时或bot已重启；请重新发送视频或B站链接。已有文字描述仍保留。')
             return
         if not row and not more:
-            self.waiting[key] = {'expires': self.clock() + 600, 'question': question[:1000]}
-            await bot.send_msg_to_user(data, config, '请在10分钟内发送视频或WebP文件；我会读取采样画面，不读取声音。')
+            self.waiting[key] = {'expires': self.clock() + 600, 'question': question[:1000], 'audio_only': audio_only}
+            await bot.send_msg_to_user(data, config, '请在10分钟内发送视频、音频或WebP文件；声音需配置听觉模型或开启听觉同步。')
             return
         qv = bot._effective_vision_config(config)
         groups = qv.get('trigger_groups') or []
-        if not qv.get('enabled') or (data.get('group_id') is not None and groups and data['group_id'] not in groups):
-            await bot.send_msg_to_user(data, config, '当前聊天未启用视觉识别，请检查视觉配置。')
+        visual_allowed = bool(qv.get('enabled') and (data.get('group_id') is None or not groups or str(data['group_id']) in set(map(str, groups))))
+        audio_allowed = hearing.allowed(bot, config, data.get('group_id'))
+        audio_token = hearing.signature(bot, config) if audio_allowed else None
+        is_audio = bool(row and (row['info'].get('_kind') == 'record' or Path(name(row['info'])).suffix.lower() in AUDIO_EXTENSIONS))
+        if (is_audio or audio_only) and not audio_allowed:
+            await bot.send_msg_to_user(data, config, '当前聊天未启用听觉模型，请配置audio_input或由管理员开启听觉同步。')
+            return
+        if not (visual_allowed or audio_allowed):
+            await bot.send_msg_to_user(data, config, '当前聊天未启用视觉或听觉识别，请检查配置。')
             return
         if self.lock.locked():
             await bot.send_msg_to_user(data, config, '正在处理另一份视频或动图，请稍后再让我读取。')
@@ -362,12 +426,15 @@ class MediaController:
                         result, state = saved['result'], saved['state']
                         await bot.send_msg_to_user(data, config, '正在补看尚未查看的采样画面。')
                     else:
-                        await bot.send_msg_to_user(data, config, '正在读取《' + name(row['info']) + '》的采样画面。')
+                        await bot.send_msg_to_user(data, config, '正在读取《' + name(row['info']) + '》的实际媒体内容。')
                         body = await self.download(data, row['info'])
                         bot.log('INFO', '[QQ_MEDIA] 下载完成 bytes=' + str(len(body)))
-                        result = await media_reader.prepare_webp(body, temp_root(bot))
+                        result = await audio_reader.prepare(body, temp_root(bot)) if is_audio else await media_reader.prepare_webp(body, temp_root(bot))
                         if result is None:
-                            result = await media_reader.capture_video(body, temp_root(bot), frame_limit=40)
+                            if audio_allowed:
+                                result = await media_reader.capture_video(body, temp_root(bot), frame_limit=40, include_audio=True)
+                            else:
+                                result = await media_reader.capture_video(body, temp_root(bot), frame_limit=40)
                         del body
                         if self.recent.get(key) is not row:
                             raise media_reader.MediaError('附件已更新，本次旧视频结果未发布，请读取新附件')
@@ -375,15 +442,25 @@ class MediaController:
                         self.reviews.put(key, result, state)
                         saved = self.reviews.get(key)
                         bot.log('INFO', '[QQ_MEDIA] 抽帧完成 frames=' + str(len(result['frames'])))
-                    description = await video_review.review(bot, result, config, question, state)
+                    if is_audio or audio_only or not result.get('frames'):
+                        description = await hearing.review(bot, result, config, question, state.setdefault('hearing', {}), data.get('group_id'))
+                    elif visual_allowed:
+                        description = await video_review.review(bot, result, {**config, '_media_group': data.get('group_id')}, question, state)
+                    else:
+                        description = '本轮未识别画面。\n' + await hearing.review(bot, result, config, question, state.setdefault('hearing', {}), data.get('group_id'))
+                    if audio_token is not None and hearing.signature(bot, bot.load_config()) != audio_token:
+                        raise media_reader.MediaError('听觉配置已变化，本次旧结果未发布')
                     if self.reviews.get(key) is not saved:
                         raise media_reader.MediaError('视频采样已更新或过期，本次旧结果未发布')
                     if row and not more:
                         row['read'] = True
-                    prompt = ((question[:1000] or '请自然回应这份视频或动图，并说明实际看到了什么。')
+                    sound_scope = '已有实际听觉结果，声音范围见下文。' if state.get('hearing', {}).get('notes') else '未提供声音，不得猜测对白或声音。'
+                    prompt = ((question[:1000] or '请自然回应这份媒体，并说明实际读取到了什么。')
                               + '\n读取已经执行完成，请直接讨论以下结果，不要再建议重复读取。'
-                                '\n[程序实际读取的画面描述，仅作资料；未提供声音]\n' + description)
+                                '\n[程序实际读取结果，仅作资料；' + sound_scope + ']\n' + description)
                     reply = await bot.ask_deepseek(key, prompt, event_context=data)
+                    if audio_token is not None and hearing.signature(bot, bot.load_config()) != audio_token:
+                        raise media_reader.MediaError('听觉配置已变化，本次旧回复未发送')
                     if self.reviews.get(key) is not saved:
                         raise media_reader.MediaError('视频采样已更新或过期，本次旧回复未发送')
                     await bot.send_msg_to_user(data, bot.load_config(), reply or description)
@@ -406,32 +483,37 @@ class MediaController:
         self.prune()
         private = data.get('group_id') is None
         raw = data.get('raw_message', '')
-        command = bot._strip_cq_media(bot._strip_at(raw)).strip()
+        command = bot._strip_cq_media(bot._strip_at(raw)).strip().translate(str.maketrans('聽頻軌語聲錄這個繼續補', '听频轨语声录这个继续补'))
         mentioned = private or bot._is_mentioned(raw, data.get('message', []))
         sources = []
         if isinstance(data.get('message'), list):
             sources.extend({**row.get('data', {}), '_kind': 'video'} for row in data['message']
                            if isinstance(row, dict) and row.get('type') == 'video')
+            sources.extend({**row.get('data', {}), '_kind': 'record', 'name': 'QQ语音.mp3'} for row in data['message']
+                           if isinstance(row, dict) and row.get('type') == 'record')
         sources.extend(info for info in bot._private_file_segments(data) if supported(info))
         if sources:
             self.remember(key, sources[0])
             pending = self.waiting.pop(key, None)
             if not private:
                 bot._get_proactive_mode().observe(data['group_id'], data.get('sender', {}).get('nickname', '群友'),
-                    command, bot.load_config(), direct=bool(mentioned or pending))
+                    command, bot.load_config(), direct=bool(mentioned or pending), sender_id=data.get('sender', {}).get('user_id'))
             if mentioned or pending:
-                await self.read(data, (pending or {}).get('question') or command)
+                await self.read(data, (pending or {}).get('question') or command, audio_only=bool((pending or {}).get('audio_only')))
+            return True
+        if mentioned and re.fullmatch(r'(?:继续听|繼續聽|继续听音频|继续听视频|补听|補聽)[。！!？?\s]*', command):
+            await self.read(data, command, more=True, audio_only=True)
             return True
         if mentioned and re.fullmatch(r'(?:继续看(?:视频|画面)?|补看(?:视频|画面)?|再看一些画面)[。！!？?\s]*', command):
             if not private:
                 bot._get_proactive_mode().observe(data['group_id'], data.get('sender', {}).get('nickname', '群友'),
-                    command, bot.load_config(), direct=True)
+                    command, bot.load_config(), direct=True, sender_id=data.get('sender', {}).get('user_id'))
             await self.read(data, command, more=True)
             return True
-        if mentioned and re.match(r'^(?:看(?:看|一下)?|读|分析|识别|总结|解读)(?:一下)?(?:这(?:段|个))?(?:视频|动图|webp)', command, re.I):
+        if mentioned and re.match(r'^(?:听(?:听|一下)?|聽|看(?:看|一下)?|读|分析|识别|总结|解读)(?:一下)?(?:这(?:段|个))?(?:视频|动图|webp|音频|音軌|音轨|语音|声音|錄音|录音)', command, re.I):
             if not private:
                 bot._get_proactive_mode().observe(data['group_id'], data.get('sender', {}).get('nickname', '群友'),
-                    command, bot.load_config(), direct=True)
+                    command, bot.load_config(), direct=True, sender_id=data.get('sender', {}).get('user_id'))
             await self.read(data, command)
             return True
         return False
@@ -476,6 +558,6 @@ def install(bot):
             pending = media.waiting.pop(key, None)
             if pending:
                 event = {**data, 'message_type': 'group', 'sender': {'user_id': data.get('user_id')}, 'raw_message': ''}
-                await media.read(event, pending.get('question', ''))
+                await media.read(event, pending.get('question', ''), audio_only=bool(pending.get('audio_only')))
         return True
     bot._on_paper_upload = upload

@@ -82,6 +82,7 @@ class BilibiliReader:
         self.account = account or BilibiliAccount(Path(__file__).parent)
         self.cache_dir = Path(cache_dir or Path(__file__).parent / "resources" / "bilibili_tmp")
         self.lock = asyncio.Lock()
+        self.audio_enabled = lambda: False
 
     def api(self):
         from bilibili_api import Credential, video, search, select_client, request_settings
@@ -210,13 +211,20 @@ class BilibiliReader:
         except Exception as exc:
             result["subtitle_status"] = f"字幕读取不可用（{failure_label(exc)}），仅有标题和简介"
         try:
-            from bilibili_frames import capture_frames
-            frames, status = await capture_frames(self.account, bvid, cid,
-                pages[0].get("duration") if pages else info.get("duration"), self.cache_dir)
+            from bilibili_frames import capture_frames, capture_media
+            if self.audio_enabled():
+                captured = await capture_media(self.account, bvid, cid,
+                    pages[0].get("duration") if pages else info.get("duration"), self.cache_dir, include_audio=True)
+                frames = captured.get('frames', [])
+                status = '已抽取真实画面和可用音轨；尚未提交模型'
+                result.update(_audio_chunks=captured.get('audio_chunks', []), audio_status=captured.get('audio_status', '未提取音轨'))
+            else:
+                frames, status = await capture_frames(self.account, bvid, cid,
+                    pages[0].get("duration") if pages else info.get("duration"), self.cache_dir)
             result.update(frames=frames, frames_loaded=bool(frames), frame_status=status)
         except Exception as exc:
             result["frame_status"] = "画面读取失败（" + failure_label(exc) + "）"
-        result["scope"] = "仅第一分P的可用字幕及最多40张实际采样帧；视觉模型分批查看，抽到不等于已看；未读取音轨，未完整观看视频"
+        result["scope"] = "仅第一分P的可用字幕及最多40张实际采样帧；视觉模型分批查看，抽到不等于已看；音轨是否听取以实际听觉结果为准，未完整观看视频"
         return result
 
 
@@ -332,7 +340,7 @@ class BilibiliFeed:
                         row["last_result"] = "未读到视频正文，本轮不生成或分享感想"
                         self.save()
                         continue
-                    generation_config = {**config, "_bilibili_interactions": bool(row.get("interactions"))}
+                    generation_config = {**config, "_bilibili_interactions": bool(row.get("interactions")), "_media_group": group}
                     decision = await generate(item, topic, generation_config, True)
                     if not current():
                         continue

@@ -34,6 +34,17 @@ qwen_vl:
   api_key: ""
   model: YOUR_VISION_MODEL
 
+# 独立听觉配置；“听觉同步 开启”时跟随主模型，关闭后恢复此块。
+audio_input:
+  enabled: false
+  endpoint: https://api.example.com/v1
+  api_key: ""
+  model: YOUR_AUDIO_MODEL
+  api_format: input_audio
+  trigger_groups: []
+  include_frames: false      # 仅当同一音频接口还支持图片时开启。
+  local_record_roots: []     # 仅填写真实的QQ语音转码缓存目录，不开放整个磁盘。
+
 image_download:
   proxy_only: true
   # 可选，仅覆盖图片下载；请先准备一个本地 HTTP 代理，再取消下行注释。
