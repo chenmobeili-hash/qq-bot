@@ -209,4 +209,4 @@ python -m unittest test_fish_audio test_fish_tts test_fish_config -q
 
 见 [PRIVACY.md](PRIVACY.md)。`.gitignore` 排除运行配置、账号登录态、记忆、缓存、日志、时间线数据库和备份；它不会删除未来已经提交到其他仓库中的历史数据。
 
-鲸鱼贴纸保留其 BSD 3-Clause 许可，见 [第三方说明](THIRD_PARTY_NOTICES.md)。本副本没有为应用源码新增开源许可证；上传 GitHub 与授予开源使用许可是不同的事。
+鲸鱼贴纸保留其 BSD 3-Clause 许可，见 [第三方说明](THIRD_PARTY_NOTICES.md)。应用源码以 MIT 许可证发布，见 LICENSE；贴纸素材不在此范围内，保留其原有许可。
