@@ -12,17 +12,29 @@ from whale_stickers import StickerReply
 
 COMMAND_HELP = """群里建议先 @我；管理员指bot配置的admin_qq，不等于QQ群管理头衔。
 
+【上下文与时间线】
+上下文状态：当前聊天、本人；自动压缩早前聊天，近期原文保留，失败不删除源历史。
+时间线 / 時間線：当前群公共事件或当前私聊；统一配置时区，不读取其他聊天。
+自主唤醒 开启 / 关闭 / 状态（支持繁体；群开关限管理员，私聊任何人可设置自己）
+私聊默认关闭，开启只影响本人私聊、重启保留，不依赖群主动模式；私聊额度独立。
+跟随已开启主动模式的群，空闲至少30分钟，每2至6小时随机一次机会，每天最多2次；可保持沉默。
+共用主动发言额度和静默时段，被新消息、私聊或定时任务打断时放弃，不自动浏览或互动。
+
 【主动聊天与读书】
 主动模式 开启 / 关闭 / 状态
 主动模式 低频 / 标准 / 活跃（仅当前群；配置：恢复配置或默认频率）
 主动阅读 开启 / 关闭 / 状态
+主动阅读状态显示固定检查点、等待原因、连续跳过次数和最迟保底。最多跳过两次，第三次条件允许必尝试挑书；受阻不清零。
+群/私聊自主唤醒状态显示原定机会时间，重启不改写；逾期在连接恢复且允许后台执行时补一次，不重等2至6小时。
 开关和切档限管理员；切档不会自动开启。主动阅读需同时开启主动模式，读书频率独立。
 主动模式也会留意本群图片：满足接话条件后每轮最多识别1张近10分钟的图，再决定是否回复。
 看图同样遵守视觉群白名单、主动模式档位与静默时段；被@和私聊仍走原有直接识图。
 主动识图有独立每日尝试额度，数值跟随当前档位（低频8/标准24/活跃30）；失败和沉默也计入。
 
-【文档】需 @我，群内使用
-挑一份你感兴趣的文档读
+【文档】群内需 @我；私聊直接说
+挑一份你感兴趣的文档读（从当前群选文档）
+私聊先发PDF/TXT/Markdown/Word，10分钟内说“读一下这份”或指定文件名；多份时需选择。
+私聊读文献、文献追问、文献状态、忘记文献及逐页精读/继续/暂停/验收/进度均只作用于本私聊。
 读文献 论文链接（也可先上传PDF/TXT/Markdown/DOCX，再发“读文献”）
 读文献 文件名（可附问题；名称不唯一时会列候选）
 也可自然说“提供《某书》的提要”：先查本群文件并给出建议，同一人确认后才阅读。
@@ -41,8 +53,13 @@ PDF初读成功后，空闲30秒会自动按下一个100页范围抽样续读，
 鲸鱼表情 好问题（或列表中的名称/ID）
 
 【QQ视频、音频与WebP】
+选择听觉模型 / 選擇聽覺模型：管理员从主模型池选择，全局仅改听觉；选定关闭同步，不改主模型。菜单可取消，2分钟有效。
 听觉同步 开启 / 关闭 / 状态（全局；开关仅管理员；支持“聽覺同步”）
 私聊直接发音频文件或语音；群里 @我 听音频 / 听语音。继续听 / 补听 从本聊天本人成功进度接着听。
+完整听力 开启 / 关闭 / 状态（别名全面听力，支持繁体；全局开关仅管理员，默认关闭，重启保留）
+开启后普通看视频、读音频及可提取的B站音轨自动听完，原有画面采样保留，仍遵守触发范围。
+听完音频 / 听完视频 / 自动听完：群里点名，私聊直接说；自动处理本聊天本人剩余音轨。
+听完进度 / 停止听完：只影响本聊天本人的完整收听任务；暂停后缓存有效期内再发“听完”恢复。
 音频和音轨最多30分钟/64MB，每段约30秒，每轮最多5段、模型段合计300秒；采样音频缓存最多1小时。
 原生音频输入无需先转文字；独立audio_input和同步主模型均需接口支持input_audio；QQ语音需接入层转码或本机可解码。
 私聊可直接发视频、视频文件或WebP；群里 @我 看视频 / 看动图，再发送附件（10分钟内）。
@@ -65,7 +82,13 @@ B站评论 BV完整号 评论文字（会真实公开发布）
 B站诊断 BV完整号
 管理员私聊：B站登录 → 扫码 → B站登录确认；B站登录状态
 
+【好友申请】全局设置，仅配置管理员
+好友申请 开启 / 关闭 / 状态（支持繁体）
+开启后由模型自行通过、拒绝或暂不处理真实好友请求；无需逐项确认，不自动发私信或授予权限。
+处理状态、待办和去重记录重启保留；接口结果不明时不重复提交。
+
 【其他】
+#sl：程序核验配置管理员，非管理员静默，不调模型。必须先在SnowLuma关闭原生statusCommand，防止接入层抢先公开回复。
 搜索 关键词（别名：搜索一下 / 查一下 / 查查）
 @我 识图：同条带图，或随后在有效期内发图
 翻译：私聊发指令再发文件；群里 @我 翻译 后私聊发文件，译文回原群
@@ -73,13 +96,13 @@ B站诊断 BV完整号
 切换风格：群里 @我 或私聊，显示当前风格，在当前聊天按菜单回复数字或“取消”
 风格增强 开启 / 关闭 / 状态：管理员开启后，姓名、自称和称呼按当前角色；记忆保留，全局生效
 修改模型：管理员直接发（别名：改模型 / 切换模型 / model），显示当前模型，在当前聊天回复数字或“取消”
-视觉同步 开启 / 关闭 / 状态：开启跟随主模型，关闭恢复独立视觉配置；开关限管理员
+视觉同步 开启 / 关闭 / 状态：开启后普通图片直接进入带上下文的主对话；缓存最多1小时、追问可重看，重启失效；开启跟随主模型，关闭恢复独立视觉配置；开关限管理员
 
 【作用范围】
 当前群：主动模式、主动阅读、刷B站及互动开关、群表情设置。
 当前用户私聊：私聊表情设置。待确认操作绑定当前聊天和发言者。
 文档：手动缓存按群和提问者隔离；主动宣布选中的书可在本群共同追问；忘记文献只清自己的缓存。
-全局：切换风格、风格增强、修改主模型、视觉同步、听觉同步，影响所有群和私聊。
+全局：切换风格、风格增强、修改主模型、选择听觉模型、视觉同步、听觉同步、完整听力、好友申请自主处理，影响所有群和私聊。
 B站账号：全bot共用登录账号，但各群浏览/互动开关独立。
 翻译：从哪个群预约，译文回哪个群；私聊直接预约则回私聊。
 
@@ -95,14 +118,22 @@ B站账号：全bot共用登录账号，但各群浏览/互动开关独立。
 
 # action -> (argument names, admin requirement, group-only, private-only)
 ACTIONS = {
+    "read_private_file": (("name",), False, False, True),
+    "friend_requests_on": ((), True, False, False), "friend_requests_off": ((), True, False, False),
+    "friend_requests_status": ((), True, False, False),
+    "private_wake_on": ((), False, False, True), "private_wake_off": ((), False, False, True),
+    "private_wake_status": ((), False, False, True),
+    "wake_on": ((), True, True, False), "wake_off": ((), True, True, False),
+    "wake_status": ((), False, True, False),
+    "context_status": ((), False, False, False), "timeline_status": ((), False, False, False),
     "proactive_on": ((), True, True, False), "proactive_off": ((), True, True, False),
     "proactive_level": (("level",), True, True, False),
     "reading_on": ((), True, True, False), "reading_off": ((), True, True, False),
-    "pick_document": ((), False, True, False), "read_document": (("url",), False, True, False),
+    "pick_document": ((), False, True, False), "read_document": (("url",), False, False, False),
     "read_group_file": (("name",), False, True, False),
-    "document_deep": ((), False, True, False), "document_resume": ((), False, True, False),
-    "document_pause": ((), False, True, False), "document_accept": ((), False, True, False),
-    "document_progress": ((), False, True, False),
+    "document_deep": ((), False, False, False), "document_resume": ((), False, False, False),
+    "document_pause": ((), False, False, False), "document_accept": ((), False, False, False),
+    "document_progress": ((), False, False, False),
     "stickers_on": ((), False, False, False), "stickers_off": ((), False, False, False),
     "stickers_blue": ((), False, False, False), "stickers_black": ((), False, False, False),
     "send_sticker": (("name",), False, False, False),
@@ -120,15 +151,20 @@ ACTIONS = {
     "search": (("query",), False, False, False), "vision": ((), False, True, False),
     "translate": ((), False, False, False), "style_menu": ((), False, False, False),
     "model_menu": ((), True, False, False),
+    "hearing_model_menu": ((), True, False, False),
     "style_enhance_on": ((), True, False, False), "style_enhance_off": ((), True, False, False),
     "style_enhance_status": ((), False, False, False),
     "style_set": (("name",), False, False, False),
     "model_set": (("provider", "model"), True, False, False),
-    "document_forget": ((), False, True, False),
+    "document_forget": ((), False, False, False),
     "translation_cancel": ((), False, False, True),
     "vision_sync_on": ((), True, False, False), "vision_sync_off": ((), True, False, False),
     "hearing_sync_on": ((), True, False, False), "hearing_sync_off": ((), True, False, False),
     "audio_read": ((), False, False, False), "audio_more": ((), False, False, False),
+    "audio_full": ((), False, False, False), "audio_full_stop": ((), False, False, False),
+    "audio_full_status": ((), False, False, False),
+    "full_hearing_on": ((), True, False, False), "full_hearing_off": ((), True, False, False),
+    "full_hearing_status": ((), False, False, False),
 }
 
 
@@ -176,8 +212,19 @@ def validate(action, args, key, admin):
 def describe(proposal):
     action, args = proposal["action"], proposal["args"]
     fixed = {
+        "friend_requests_on": "全局开启自主好友申请，由模型自行决定通过、拒绝或暂不处理；会真实处理QQ好友请求，不会自动授权或发私信",
+        "friend_requests_off": "全局关闭后续自主好友申请，保留待办和去重记录；已交给QQ的操作不能撤回",
+        "friend_requests_status": "仅限配置管理员查询全局好友申请开关及处理统计，不公开申请留言和名单",
         "qq_media_read": "读取当前聊天中你最近发送的QQ视频、音频或WebP；有可用听觉配置时读取实际音轨；已读取时直接讨论已有描述，不重复建议读取",
         "video_more": "接着补看本聊天本人上次QQ视频、WebP或手动B站视频中尚未查看的真实采样；已有描述足够回答时直接聊天，不重复读取；缓存最多1小时，重启失效",
+        "private_wake_on": "仅在当前发言者本人的私聊开启偶尔自主唤醒，默认关闭；重启保留，不依赖群主动模式，每天最多2次机会",
+        "private_wake_off": "仅关闭当前发言者本人的私聊自主唤醒，不改变群或其他私聊",
+        "private_wake_status": "查询当前发言者本人的私聊自主唤醒状态",
+        "wake_on": "在当前群开启偶尔自主唤醒，仍需主动模式已开启，共用静默时段和每日额度",
+        "wake_off": "在当前群关闭自主唤醒，保留普通主动接话",
+        "wake_status": "查询当前群自主唤醒状态",
+        "context_status": "查询本聊天本人上下文压缩状态",
+        "timeline_status": "只查询当前聊天的统一事件时间线，不跨群或私聊取内容",
         "proactive_on": "在本群开启主动模式：允许偶尔主动接话，并按主动阅读设置偶尔找群文档读",
         "proactive_off": "在本群关闭主动模式，同时暂停主动阅读",
         "reading_on": "在本群开启主动阅读：主动模式开启时，空闲时偶尔挑群文档阅读和分享",
@@ -202,17 +249,25 @@ def describe(proposal):
         "style_enhance_off": "全局关闭风格增强：恢复原有持续身份与风格组合规则，不删除记忆",
         "style_enhance_status": "查看全局风格增强状态",
         "model_menu": "打开修改模型菜单；选定后全局生效，影响所有群和私聊；视觉同步开启时看图也跟随",
+        "hearing_model_menu": "打开选择听觉模型菜单，从主模型池选择；选定后全局独立用于音频并关闭听觉同步，不改变主模型及视觉设置",
+        "full_hearing_on": "全局开启完整听力，已触发的音频读取、看视频及可提取的B站音轨默认逐段听完；画面仍是采样，模型和触发权限不变，可能多次调用音频模型",
+        "full_hearing_off": "全局关闭完整听力，停止后续自动续听并恢复分轮行为；显式听完指令仍可使用，不删除记忆",
+        "full_hearing_status": "查看全局完整听力开关及其作用范围",
+        "audio_full": "对当前聊天本人最近的音频或视频音轨自动逐段听完，忽略信息够用时提前停止的判断；每轮最多5段/300秒，总上限30分钟/64MB；可停止、查询进度，缓存最多1小时，失败暂停保留成功片段；不代表视频画面完整看过",
+        "audio_full_stop": "停止本聊天本人完整收听任务或上传预约，保留成功片段；不停止别人的任务",
+        "audio_full_status": "查看本聊天本人完整收听任务和实际音轨处理进度",
         "audio_read": "读取本聊天本人最近发送的音频或视频的真实音轨，需已配置听觉模型或听觉同步；不跨聊天读取",
         "audio_more": "从本聊天本人上一份媒体成功保存的听觉进度继续听，缓存最多1小时；不会把失败片段记为已听",
         "hearing_sync_on": "全局开启听觉同步，音频与视频音轨跟随主模型及接口；主模型和接口必须支持input_audio，实际调用后才能确认支持",
-        "hearing_sync_off": "全局关闭听觉同步，恢复原独立audio_input配置，不修改主模型及视觉设置",
+        "hearing_sync_off": "全局关闭听觉同步，恢复已选的独立听觉模型；尚未选择时用audio_input配置，不修改主模型及视觉设置",
         "vision_sync_on": "全局开启视觉同步：所有群、私聊识图及B站采样帧使用当前主模型；以后跟随主模型切换",
         "vision_sync_off": "全局关闭视觉同步：所有群、私聊识图及B站采样帧恢复原独立视觉配置，不改变主模型",
-        "document_forget": "清除你在本群的文献缓存、上传预约及当前共享文献的个人可见状态，不删除全群已读记录",
+        "document_forget": "清除当前聊天本人的文献缓存、上传预约及阅读任务，不删除其他人或其他聊天的记录",
         "translation_cancel": "取消你当前私聊的等待翻译文件预约",
     }
     return fixed.get(action) or {
         "read_document": "读取指定文献：" + args.get("url", ""),
+        "read_private_file": "读取当前私聊本人最近10分钟的文档：" + args.get("name", ""),
         "read_group_file": "读取本群文件：" + args.get("name", ""),
         "proactive_level": "将本群主动模式调为“" + args.get('level', '') + "”档；只改频率，不自动开启，保留当日用量",
         "bili_topics": "修改本群自动刷B站的兴趣：" + args.get('topics', ''),

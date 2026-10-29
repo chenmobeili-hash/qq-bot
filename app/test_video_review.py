@@ -165,9 +165,8 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_bilibili_generation_forwards_evidence_without_raw_frame_payload_or_internal_state(self):
         cfg = {'qwen_vl': {'enabled': True}}
         create = AsyncMock(return_value=SimpleNamespace(choices=[SimpleNamespace(
-            message=SimpleNamespace(content='人格总结'), finish_reason='stop')]))
-        client = SimpleNamespace(with_options=lambda **kw: SimpleNamespace(chat=SimpleNamespace(
-            completions=SimpleNamespace(create=create))))
+            message=SimpleNamespace(content=json.dumps({'kind': 'send', 'reply': '人格总结'})), finish_reason='stop')]))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
         item = {'frames': video()['frames'], 'frames_loaded': True, 'duration_seconds': 300}
         with patch.object(bot, '_persona_prompt', return_value='人格'), \
              patch.object(bot, '_runtime_prompt', return_value=''), patch.object(bot, '_init_deepseek'), \

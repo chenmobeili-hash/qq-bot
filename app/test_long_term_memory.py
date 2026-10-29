@@ -143,11 +143,13 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(parse(raw(), 'private_7', {}, False).memory, [])
         self.assertEqual(parse(raw([note()]), 'private_7', {}, False).memory, [note()])
 
-    def test_invalid_or_unprivileged_memory_never_passes_parser(self):
+    def test_invalid_or_unprivileged_memory_is_discarded_without_losing_reply(self):
         for value in [raw([note('identity')]), raw([note(text='x' * 501)]),
                       raw([dict(note(), target='private_8')]), raw('invalid')]:
-            with self.assertRaises(DecisionError):
-                parse(value, 'private_7', {}, False)
+            result = parse(value, 'private_7', {}, False)
+            self.assertEqual(result.memory, [])
+            self.assertTrue(result.reply)
+            self.assertIsNotNone(result.memory_error)
 
     def test_inspection_is_readonly_even_when_model_proposes_memory(self):
         with self.assertRaises(DecisionError):

@@ -290,8 +290,8 @@ class MediaIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_bilibili_final_model_gets_notes_not_audio_bytes(self):
         create = AsyncMock(return_value=SimpleNamespace(choices=[SimpleNamespace(
-            finish_reason='stop', message=SimpleNamespace(content='实际画面和人声。'))]))
-        client = SimpleNamespace(with_options=lambda **kw: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+            finish_reason='stop', message=SimpleNamespace(content=json.dumps({'kind': 'send', 'reply': '实际画面和人声。'})))]))
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
         item = {'frames_loaded': True, 'frames': [{'second': 0, 'base64': 'PRIVATE_FRAME_DATA'}],
                 '_audio_chunks': [{'base64': 'PRIVATE_AUDIO_DATA'}], 'audio_status': '提取成功'}
         with patch.object(bot, '_persona_prompt', return_value='角色'), \

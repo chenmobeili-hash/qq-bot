@@ -87,14 +87,20 @@ class EnvelopeTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(DecisionError):
                 self.parsed(value)
 
-    def test_envelope_kind_permissions_and_memory_rules_stay_strict(self):
+    def test_envelope_kind_and_action_permissions_stay_strict(self):
         bad = [wrapped(kind='unknown'), wrapped(action='exec', args={'cmd': 'x'}, kind='operation'),
-               wrapped(action='proactive_on', kind='operation'),
-               '前言\n' + json.dumps({'kind': 'chat', 'reply': 'x', 'action': None,
-                    'memory': [{'op': 'remember', 'scope': 'identity', 'key': 'name', 'text': 'unauthorized'}]})]
+               wrapped(action='proactive_on', kind='operation')]
         for value in bad:
             with self.subTest(value=value), self.assertRaises(DecisionError):
                 self.parsed(value, admin=False)
+
+    def test_wrapped_unprivileged_memory_is_discarded_but_reply_survives(self):
+        value = '前言\n' + json.dumps({'kind': 'chat', 'reply': '正常聊天', 'action': None,
+            'memory': [{'op': 'remember', 'scope': 'identity', 'key': 'name', 'text': 'unauthorized'}]})
+        result = self.parsed(value, admin=False)
+        self.assertEqual(result.reply, '正常聊天')
+        self.assertEqual(result.memory, [])
+        self.assertEqual(result.memory_error, ('memory_identity_forbidden', 0))
 
     def test_size_limit_and_non_object_json_remain_rejected(self):
         for value in ('前言' * 50001 + fixtures.envelope(), '[]', '42', '"string"'):

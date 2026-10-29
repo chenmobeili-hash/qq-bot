@@ -7,6 +7,7 @@ import zipfile
 from html.parser import HTMLParser
 from pathlib import Path
 from xml.etree import ElementTree
+import model_stream
 
 
 SUPPORTED_EXTENSIONS = {
@@ -151,7 +152,7 @@ async def translate_chunks(client, model: str, chunks: list[str], target_languag
         last_error = None
         for attempt in range(3):
             try:
-                response = await client.chat.completions.create(
+                response = await model_stream.create(client, _stream_log=None, _stream_source='file_translation_translate_chunks', 
                     model=model,
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": chunk}],

@@ -64,7 +64,7 @@ class ReadingSessions:
                 if not isinstance(self.ignored, dict) or len(self.ignored) > 256:
                     raise ValueError('Invalid personal visibility state')
                 for key, job in self.jobs.items():
-                    if (not re.fullmatch(r'group_\d+_\d+:[a-f0-9]{64}', key)
+                    if (not re.fullmatch(r'(?:group_\d+_\d+|private_\d+):[a-f0-9]{64}', key)
                             or not isinstance(job, dict) or job.get('id') != key
                             or job.get('scope') != key.rsplit(':', 1)[0] or job.get('sha') != key.rsplit(':', 1)[1]
                             or job.get('mode') not in ('sample', 'deep')
@@ -142,7 +142,7 @@ class ReadingSessions:
 
     def start(self, scope, doc, review):
         sha = doc.get('_reading_sha')
-        if not sha or not re.fullmatch(r'group_\d+_\d+', scope):
+        if not sha or not re.fullmatch(r'(?:group_\d+_\d+|private_\d+)', scope):
             return None
         key = scope + ':' + sha
         for job in self.jobs.values():

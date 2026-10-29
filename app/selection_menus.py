@@ -10,10 +10,15 @@ from persona import load_persona
 CANCEL_WORDS = frozenset(('取消', '取消选择', '取消選擇', '不用', '不用了', '不要',
                           '算了', '不改了', '不切换了', '不切換了', '不触发'))
 MODEL_COMMANDS = frozenset(('修改模型', '改模型', '切换模型', 'model'))
+HEARING_COMMANDS = frozenset(('选择听觉模型', '選擇聽覺模型', '修改听觉模型', '修改聽覺模型'))
 TTL = 120
 
 
 def current(bot, config, kind):
+    if kind == 'hearing':
+        import hearing
+        switch = hearing.sync(bot)
+        return switch.enabled, json_selection(switch.selection), hearing.signature(bot, config)
     if kind == 'model':
         provider = config.get('current_provider') or getattr(bot, 'current_provider', '') or '未指定'
         model = config.get('current_model') or config.get('deepseek', {}).get('model') or getattr(bot, 'current_model', '') or '未指定'
@@ -21,13 +26,24 @@ def current(bot, config, kind):
     return load_persona(bot.BASE_DIR, config)[1]
 
 
+def json_selection(selection):
+    return tuple(sorted((selection or {}).items()))
+
+
 def label(bot, config, kind):
+    if kind == 'hearing':
+        import hearing
+        switch = hearing.sync(bot)
+        route = hearing.route(bot, config)
+        provider = (config.get('current_provider') or '主模型') if switch.enabled else route.get('_provider', '独立配置')
+        mode = '跟随主模型' if switch.enabled else '独立使用'
+        return f'当前听觉模型：{provider} / {route.get("model") or "未配置"}（{mode}）'
     value = current(bot, config, kind)
     return '当前模型：' + ' / '.join(value) if kind == 'model' else '当前风格：' + value
 
 
 def title(kind):
-    return '修改模型' if kind == 'model' else '切换风格'
+    return {'model': '修改模型', 'style': '切换风格', 'hearing': '选择听觉模型'}[kind]
 
 
 def invalidate(bot, key):
@@ -42,7 +58,7 @@ async def publish(bot, data, config, state, lines):
         return False
     state.update(expires=time.monotonic() + TTL, ready=False)
     for other, old in list(bot.user_states.items()):
-        if old.get('kind') in ('model', 'style') and old.get('expires', 0) <= time.monotonic():
+        if old.get('kind') in ('model', 'style', 'hearing') and old.get('expires', 0) <= time.monotonic():
             bot.user_states.pop(other, None)
     bot.user_states[key] = state
     while len(bot.user_states) > 128:
@@ -62,19 +78,21 @@ async def publish(bot, data, config, state, lines):
     return True
 
 
-async def open_model(bot, data, config):
+async def open_model(bot, data, config, kind='model'):
     actor = str(data.get('sender', {}).get('user_id', ''))
     if not bot.is_admin(actor, config):
-        await bot.send_msg_to_user(data, config, '❌ 你没有权限修改模型！')
+        await bot.send_msg_to_user(data, config, f'❌ 你没有权限{title(kind)}！')
         return True
     providers = [name for name, item in config.get('llm_providers', {}).items() if item.get('enabled')]
     if not providers:
-        await bot.send_msg_to_user(data, config, '当前没有可用的提供方。\n' + label(bot, config, 'model'))
+        await bot.send_msg_to_user(data, config, '当前没有可用的提供方。\n' + label(bot, config, kind))
         return True
-    state = {'kind': 'model', 'stage': 'provider', 'choices': providers,
-             'baseline': current(bot, config, 'model')}
+    state = {'kind': kind, 'stage': 'provider', 'choices': providers,
+             'baseline': current(bot, config, kind)}
     return await publish(bot, data, config, state,
-        ['正在修改模型', label(bot, config, 'model'), '请选择提供方：']
+        ['正在' + title(kind), label(bot, config, kind), '请选择提供方：']
+        + (['从主模型池选择，选定仅修改听觉并关闭听觉同步；不会修改主模型。',
+            '池中模型未逐一验证音频能力，需接口支持input_audio。'] if kind == 'hearing' else [])
         + [f'  [{i}] {name}' for i, name in enumerate(providers, 1)])
 
 
@@ -111,6 +129,30 @@ async def set_model(bot, data, provider, model):
     return True
 
 
+async def set_hearing_model(bot, data, provider, model):
+    import hearing
+    config = bot.load_config()
+    actor = str(data.get('sender', {}).get('user_id', ''))
+    if not bot.is_admin(actor, config):
+        await bot.send_msg_to_user(data, config, '当前账号没有选择听觉模型的权限，未修改设置。')
+        return True
+    entry = bot.get_provider_config(config, provider)
+    if not entry.get('enabled') or model not in bot.get_available_models(config, provider):
+        await bot.send_msg_to_user(data, config, '该提供方或模型当前不可用，请重新选择。')
+        return True
+    if not entry.get('api_key') or not entry.get('endpoint'):
+        await bot.send_msg_to_user(data, config, '该提供方缺少接口或密钥，未修改听觉设置。')
+        return True
+    try:
+        hearing.sync(bot).select(provider, model)
+    except OSError:
+        await bot.send_msg_to_user(data, config, '听觉选择未保存，请检查hearing_sync_state.json及目录权限；原设置保留。')
+        return True
+    await bot.send_msg_to_user(data, config, '✅ 已全局选择听觉模型。\n' + label(bot, config, 'hearing')
+        + '\n听觉同步已关闭，主模型保持原样。所有群和私聊生效；实际音频兼容性尚未验证。')
+    return True
+
+
 async def handle(bot, data, command, config):
     key = bot._mechanism_key(data)
     if not key:
@@ -122,22 +164,22 @@ async def handle(bot, data, command, config):
     if data.get('group_id') is not None and any(qq not in (str(bot.bot_qq), 'all') for qq in other_ats):
         return False
     command = command.strip().rstrip('。！! ')
-    opening = command in MODEL_COMMANDS or command == '切换风格'
+    opening = command in MODEL_COMMANDS or command in HEARING_COMMANDS or command == '切换风格'
     if opening:
         if command == '切换风格' and data.get('group_id') is not None and not bot._is_mentioned(raw, data.get('message', [])):
             return False
         # A denied model command must not destroy an existing style selection.
-        if command in MODEL_COMMANDS and not bot.is_admin(str(data.get('sender', {}).get('user_id', '')), config):
-            return await open_model(bot, data, config)
+        if command in MODEL_COMMANDS | HEARING_COMMANDS and not bot.is_admin(str(data.get('sender', {}).get('user_id', '')), config):
+            return await open_model(bot, data, config, 'hearing' if command in HEARING_COMMANDS else 'model')
         invalidate(bot, key)
         bot._get_mechanism_assistant().cancel(key)
         group_files = getattr(bot, 'group_file_state', None)
         if data.get('group_id') is not None and group_files is not None:
             group_files.cancel(data['group_id'], str(data.get('sender', {}).get('user_id', '')))
         bot.user_states.pop(key, None)
-        return await (open_style(bot, data, config) if command == '切换风格' else open_model(bot, data, config))
+        return await (open_style(bot, data, config) if command == '切换风格' else open_model(bot, data, config, 'hearing' if command in HEARING_COMMANDS else 'model'))
     state = bot.user_states.get(key)
-    if not state or state.get('kind') not in ('model', 'style'):
+    if not state or state.get('kind') not in ('model', 'style', 'hearing'):
         return False
     kind = state['kind']
     if command in CANCEL_WORDS:
@@ -155,8 +197,8 @@ async def handle(bot, data, command, config):
         reason = '选择已过期，请重新打开菜单。'
     elif not state.get('ready'):
         reason = '菜单尚未确认送达，请重新打开菜单。'
-    elif kind == 'model' and not bot.is_admin(str(data.get('sender', {}).get('user_id', '')), fresh):
-        reason = '当前账号没有修改模型的权限，已退出选择。'
+    elif kind in ('model', 'hearing') and not bot.is_admin(str(data.get('sender', {}).get('user_id', '')), fresh):
+        reason = f'当前账号没有{title(kind)}的权限，已退出选择。'
     elif state['baseline'] != current(bot, fresh, kind):
         reason = '当前设置已变化，已退出旧菜单，请重新选择。'
     if reason:
@@ -174,12 +216,14 @@ async def handle(bot, data, command, config):
             await bot.send_msg_to_user(data, fresh, '该提供方当前不可用，请重新选择。')
             return True
         return await publish(bot, data, fresh,
-            {'kind': 'model', 'stage': 'model', 'provider': chosen, 'choices': list(models), 'baseline': state['baseline']},
-            ['正在修改模型', label(bot, fresh, 'model'), f'请选择 {chosen} 的模型：']
+            {'kind': kind, 'stage': 'model', 'provider': chosen, 'choices': list(models), 'baseline': state['baseline']},
+            ['正在' + title(kind), label(bot, fresh, kind), f'请选择 {chosen} 的模型：']
             + [f'  [{i}] {name}' for i, name in enumerate(models, 1)])
     bot.user_states.pop(key, None)  # Consume before awaiting any operation.
     if kind == 'model':
         return await set_model(bot, data, state['provider'], chosen)
+    if kind == 'hearing':
+        return await set_hearing_model(bot, data, state['provider'], chosen)
     directory = Path(bot.BASE_DIR) / 'prompts'
     styles = style_catalog.available(bot.BASE_DIR)
     if chosen not in styles:

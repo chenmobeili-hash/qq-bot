@@ -30,9 +30,9 @@ def permitted(relative):
     path = PurePosixPath(relative)
     if len(path.parts) == 1:
         return path.name in {
-            ".gitignore",
+            ".gitignore", "model_stream.py", "MODEL_STREAMING.md", "configure_serpapi.py", "serpapi_lens.py", "SERPAPI_LENS.md", "SERPAPI.example.yaml", "visual_search.py", "VISUAL_SEARCH.md", "direct_vision.py", "private_documents.py", "DIRECT_DIALOGUE.md", "friend_requests.py", "FRIEND_REQUESTS.md", "long_term_memory.py", "AUTONOMOUS_MEMORY.md", "cognitive_state.py", "cognitive_runtime.py", "private_wake.py", "CONTEXT_TIMELINE.md",
             "qq_media.py", "media_reader.py", "video_review.py", "VIDEO_REVIEW.md",
-            "proactive_images.py", "PROACTIVE_IMAGES.md", "public_message.py", "PUBLIC_MESSAGES.md", "hearing.py", "audio_reader.py", "AUDIO_INPUT.md", "word_reader.py", "WORD_READING.md", "feature_update.py",
+            "proactive_images.py", "PROACTIVE_IMAGES.md", "public_message.py", "PUBLIC_MESSAGES.md", "hearing.py", "full_listening.py", "full_hearing.py", "audio_reader.py", "AUDIO_INPUT.md", "word_reader.py", "WORD_READING.md", "feature_update.py",
             "bot.py", "image_network.py", "image_cache.py", "paper_download.py", "apply_download_update.py", "DOWNLOAD_RELIABILITY.md", "reading_sessions.py", "reading_pages.py", "reading_bridge.py", "persona.py", "proactive.py", "paper_autonomy.py", "mechanism_assistant.py", "vision_sync.py", "bilibili_feed.py", "bilibili_frames.py",
             "bilibili_account.py", "whale_stickers.py", "paper_reader.py", "group_file_reader.py", "model_decision.py", "file_translation.py",
             "image_search.py", "wiki_lookup.py", "switch_style.py", "requirements.txt",

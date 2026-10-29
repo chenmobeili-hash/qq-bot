@@ -24,6 +24,16 @@ llm_providers:
     endpoint: https://api.example.com/v1
     api_key: ""
     models: [YOUR_MODEL]
+  # 填写Google AI Studio密钥并启用；可用于独立听觉选择。
+  google_ai_studio:
+    enabled: false
+    endpoint: https://generativelanguage.googleapis.com/v1beta/openai/
+    api_key: ''
+    models:
+    - gemini-3.8-flash
+    - gemini-3.5-flash-lite
+    - gemini-3.6-flash
+    - gemini-4-argon
 current_provider: example
 current_model: YOUR_MODEL
 
@@ -83,3 +93,37 @@ welcome:
 schedule: []
 messages_file: messages.txt
 heartbeat_interval: 30
+
+# 首次部署默认关闭；管理员可发“好友申请 开启”全局开启。
+friend_requests:
+  enabled: false
+
+# 将本段合并到你自己的 app/config.yaml 顶层；已存在serpapi时编辑原段，不要重复添加。
+# key只填在自己的配置或环境变量里，不要提交GitHub或聊天。
+serpapi:
+  enabled: false
+  api_key: ""                    # 在这里填你的SerpApi key；不是Serper key。
+  api_key_env: SERPAPI_API_KEY     # api_key为空时，可从同名环境变量读取。
+  hl: zh-cn
+  timeout_seconds: 55
+  daily_limit: 20                 # 本地滚动24小时最多20次尝试，重启不清零。
+  min_interval_seconds: 8
+  proxy: ""                      # 留空跟随bot进程的环境HTTP代理；可填本机HTTP代理入口。
+
+# Fish Audio TTS; this section is private, never upload a real key to GitHub.
+fish_audio:
+  enabled: false
+  api_key: ""
+  api_key_env: FISH_AUDIO_API_KEY
+  model: s2.1-pro-free
+  voice_id: ""
+  voices: {}
+  default_voice: ""
+  max_chars: 180
+  max_seconds: 30
+  timeout_seconds: 55
+  daily_limit: 60
+  scope_daily_limit: 20
+  auto_cooldown_seconds: 60
+  use_env_proxy: true
+  proxy: ""

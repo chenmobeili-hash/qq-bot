@@ -7,6 +7,8 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
+import hashlib
+import math
 
 
 DEFAULTS = {
@@ -16,6 +18,8 @@ DEFAULTS = {
     "idle_enabled": True, "idle_seconds": 1800,
     "context_messages": 12, "context_max_age_seconds": 21600,
     "min_messages": 2,
+    "wake_enabled": True, "wake_min_seconds": 7200, "wake_max_seconds": 21600,
+    "wake_daily_limit": 2,
 }
 
 # Only frequency changes with a level; global enablement and quiet hours remain configured.
@@ -48,9 +52,12 @@ def settings(config):
         ("settle_seconds", 3, 120), ("idle_seconds", 600, 86400),
         ("context_messages", 1, 30), ("context_max_age_seconds", 600, 86400),
         ("min_messages", 1, 30), ("quiet_start", 0, 23), ("quiet_end", 0, 23),
+        ("wake_min_seconds", 1800, 86400), ("wake_max_seconds", 1800, 172800),
+        ("wake_daily_limit", 1, 4),
     ):
         result[name] = max(low, min(high, int(result[name])))
     result["reply_probability"] = max(0.0, min(1.0, float(result["reply_probability"])))
+    result['wake_max_seconds'] = max(result['wake_min_seconds'], result['wake_max_seconds'])
     return result
 
 
@@ -78,6 +85,11 @@ class ProactiveMode:
         self.levels = {}
         self.daily = {}
         self.image_daily = {}
+        self.wake_overrides, self.wake_due, self.wake_daily = {}, {}, {}
+        self.wake_boot = set()
+        self.wake_sequence = {}
+        self.activity = {}
+        self._activity_saved = 0
         self.lock = asyncio.Lock()
         self.storage_ok = True
         if self.path.exists():
@@ -91,6 +103,16 @@ class ProactiveMode:
                               if isinstance(v, dict)}
                 self.image_daily = {str(k): v for k, v in saved.get('image_daily', {}).items()
                                     if isinstance(v, dict)}
+                self.wake_overrides = {str(k): v for k, v in saved.get('wake_groups', {}).items() if isinstance(v, bool)}
+                self.wake_due = {str(k): float(v) for k, v in saved.get('wake_due', {}).items() if isinstance(v, (int, float))}
+                self.wake_daily = {str(k): v for k, v in saved.get('wake_daily', {}).items() if isinstance(v, dict)}
+                self.wake_sequence = {str(k): int(v) for k, v in saved.get('wake_sequence', {}).items() if isinstance(v, int) and v >= 0}
+                self.activity = {str(k): v for k, v in saved.get('activity', {}).items()
+                                 if str(k).isdigit() and isinstance(v, dict)}
+                for row in self.activity.values():
+                    if any(not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0
+                           for field, value in row.items() if field in ('since', 'last_human', 'last_bot', 'direct_until')):
+                        raise ValueError('Invalid saved activity')
             except (OSError, ValueError, AttributeError, TypeError) as exc:
                 self.storage_ok = False
                 self.log("ERROR", f"主动模式状态读取失败，已暂停主动发言：{type(exc).__name__}")
@@ -98,9 +120,80 @@ class ProactiveMode:
     def save(self):
         temporary = self.path.with_suffix(".tmp")
         temporary.write_text(json.dumps({"groups": self.overrides, "levels": self.levels, "daily": self.daily,
-                                        "image_daily": self.image_daily},
+                                        "image_daily": self.image_daily, 'wake_groups': self.wake_overrides,
+                                        'wake_due': self.wake_due, 'wake_daily': self.wake_daily,
+                                        'activity': self.activity, 'wake_sequence': self.wake_sequence},
                                         ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.chmod(0o600)
         temporary.replace(self.path)
+
+    def wake_enabled(self, group_id, config):
+        return self.wake_overrides.get(str(group_id), bool(settings(config)['wake_enabled']))
+
+    def set_wake(self, group_id, value):
+        if not self.storage_ok:
+            raise OSError('Proactive storage unavailable')
+        key = str(group_id)
+        previous, previous_due = dict(self.wake_overrides), dict(self.wake_due)
+        self.wake_overrides[key] = bool(value)
+        self.wake_due.pop(key, None)
+        try:
+            self.save()
+        except OSError:
+            self.wake_overrides = previous
+            self.wake_due = previous_due
+            raise
+        self.groups.pop(key, None)
+        self.wake_boot.discard(key)
+
+    def schedule_wake(self, key, config):
+        cfg = self.effective_settings(key, config)
+        number = self.wake_sequence.get(key, 0) + 1
+        self.wake_sequence[key] = number
+        jitter = int(hashlib.sha256(f'{key}:{number}'.encode()).hexdigest()[:12], 16) / (16 ** 12)
+        interval = cfg['wake_min_seconds'] + jitter * (cfg['wake_max_seconds'] - cfg['wake_min_seconds'])
+        anchor = self.wake_due.get(key)
+        if not isinstance(anchor, (int, float)) or not math.isfinite(anchor):
+            anchor = self.clock()
+        # Advance from the original scheduled instant, never from recovery time.
+        steps = max(1, math.floor((self.clock() - anchor) / interval) + 1)
+        self.wake_due[key] = anchor + steps * interval
+
+    def remember_activity(self, key, group, force=False):
+        row = self.activity.setdefault(key, {'since': self.clock()})
+        row.update(last_human=group.last_human, last_bot=group.last_bot, direct_until=group.direct_until)
+        if force or self.clock() - self._activity_saved >= 30:
+            try:
+                self.save()
+                self._activity_saved = self.clock()
+            except OSError:
+                self.storage_ok = False
+                self.log('ERROR', '主动活动状态未保存，后台发言已暂停；正常聊天继续。')
+
+    def seed(self, config):
+        candidates = set(map(str, settings(config)['groups'])) | set(self.overrides)
+        changed = False
+        for key in candidates:
+            if not key.isdigit() or not self.enabled(key, config):
+                continue
+            if key not in self.groups:
+                row = self.activity.setdefault(key, {'since': self.clock()})
+                def past(field):
+                    value = row.get(field, 0)
+                    return min(self.clock(), float(value) + 30) if isinstance(value, (int, float)) and value > 0 and math.isfinite(value) else 0
+                self.groups[key] = Group(last_human=past('last_human'), last_bot=past('last_bot'),
+                    direct_until=min(self.clock() + 300, float(row.get('direct_until', 0))))
+                changed = True
+            if key not in self.wake_boot and self.wake_enabled(key, config):
+                due = self.wake_due.get(key)
+                if not isinstance(due, (int, float)) or not math.isfinite(due):
+                    self.schedule_wake(key, config)
+                # Keep overdue timestamps intact. Global readiness already waits for
+                # connection/startup idle; an overdue opportunity is attempted once.
+                self.wake_boot.add(key)
+                changed = True
+        if changed:
+            self.save()
 
     def effective_settings(self, group_id, config):
         cfg = settings(config)
@@ -138,15 +231,18 @@ class ProactiveMode:
         if not self.storage_ok:
             raise OSError("状态文件读取失败，请先检查 proactive_state.json")
         key = str(group_id)
-        previous = dict(self.overrides)
+        previous, previous_due = dict(self.overrides), dict(self.wake_due)
         self.overrides[key] = enabled
+        self.wake_due.pop(key, None)
         try:
             self.save()
         except OSError:
             self.overrides = previous
+            self.wake_due = previous_due
             raise
         # Do not act on messages received before a mode change.
         self.groups.pop(key, None)
+        self.wake_boot.discard(key)
 
     def reserve_image(self, group_id, config, day):
         key = str(group_id)
@@ -191,6 +287,7 @@ class ProactiveMode:
             if images:
                 row.update(images=images, image_id=uuid.uuid4().hex, image_attempted=False)
             group.messages.append(row)
+        self.remember_activity(key, group)
 
     def note_bot(self, group_id, text):
         group = self.groups.get(str(group_id))
@@ -200,6 +297,7 @@ class ProactiveMode:
             group.direct_until = 0
             group.checked_revision = group.revision
             group.messages.append({"sender": "机器人自己", "text": text[:1000], "at": now})
+            self.remember_activity(str(group_id), group, force=True)
 
     @staticmethod
     def quiet(cfg, hour):
@@ -217,12 +315,19 @@ class ProactiveMode:
         elapsed = now - group.last_human
         if (self.quiet(cfg, local_now.hour) or now < group.direct_until
                 or now - max(group.last_bot, group.last_attempt) < cfg["cooldown_seconds"]
-                or elapsed < cfg["settle_seconds"]
-                or elapsed > cfg["context_max_age_seconds"]):
+                or elapsed < cfg["settle_seconds"]):
             return None
         day = local_now.date().isoformat()
         usage = self.daily.get(key, {})
         if usage.get("date") == day and int(usage.get("count", 0)) >= cfg["daily_limit"]:
+            return None
+        if (self.wake_enabled(key, config) and now >= self.wake_due.get(key, float('inf'))
+                and now - max(group.last_bot, group.last_human) >= 1800):
+            usage = self.wake_daily.get(key, {})
+            count = int(usage.get('count', 0)) if usage.get('date') == day else 0
+            if count < cfg['wake_daily_limit']:
+                return 'wake'
+        if elapsed > cfg['context_max_age_seconds']:
             return None
         if elapsed >= cfg["idle_seconds"]:
             if (cfg["idle_enabled"] and not group.idle_used
@@ -242,6 +347,7 @@ class ProactiveMode:
         if self.lock.locked() or not connected():
             return
         async with self.lock:
+            self.seed(get_config())
             for key, group in list(self.groups.items()):
                 self.prune_images(group)
                 config = get_config()
@@ -253,6 +359,14 @@ class ProactiveMode:
                 revision = group.revision
                 last_bot = group.last_bot
                 group.last_attempt = self.clock()
+                if reason == 'wake':
+                    day = local_now.date().isoformat()
+                    usage = self.wake_daily.get(key, {})
+                    count = int(usage.get('count', 0)) if usage.get('date') == day else 0
+                    # Budget applies to opportunities, even if the model stays silent or fails.
+                    self.wake_daily[key] = {'date': day, 'count': count + 1}
+                    self.schedule_wake(key, config)
+                    self.save()
                 if reason == "idle":
                     # One opening opportunity per human activity, including a model decision to stay silent.
                     group.idle_used = True
@@ -267,6 +381,7 @@ class ProactiveMode:
                             or key in self.background_busy
                             or group.revision != revision or group.last_bot != last_bot
                             or not self.enabled(key, fresh) or not connected()
+                            or (reason == 'wake' and not self.wake_enabled(key, fresh))
                             or self.quiet(self.effective_settings(key, fresh), now.hour)
                             or self.clock() < group.direct_until):
                         continue

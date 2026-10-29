@@ -19,6 +19,7 @@ import video_review
 import hearing
 import audio_reader
 from image_network import ImageAddressError, ImageDoHResolver, validate_image_url
+import model_stream
 
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.opus', '.amr'}
 VIDEO_EXTENSIONS = {'.mp4', '.m4v', '.mov', '.webm', '.mkv', '.avi'}
@@ -255,7 +256,7 @@ async def describe_frames(bot, result, config):
         parts.extend([{'type': 'text', 'text': '采样定位约：' + str(frame['second']) + '秒'},
                       {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + frame['base64']}}])
     client = bot.qwen_vl_client.with_options(max_retries=0, timeout=bot.VISION_TIMEOUT)
-    response = await asyncio.wait_for(client.chat.completions.create(model=qv.get('model', 'qwen-vl-plus'),
+    response = await asyncio.wait_for(model_stream.create(client, _stream_log=bot.log, _stream_source='qq_media_describe_frames', model=qv.get('model', 'qwen-vl-plus'),
         messages=[{'role': 'user', 'content': parts}], max_tokens=2200, temperature=0.2), bot.VISION_TIMEOUT)
     if bot._vision_route_signature(bot.load_config()) != route:
         raise media_reader.MediaError('识别期间视觉模型配置已变化，请重新发送')
@@ -276,6 +277,8 @@ class MediaController:
         self.recent, self.waiting = {}, {}
         self.lock = asyncio.Lock()
         self.reviews = video_review.ReviewCache(clock)
+        from full_listening import FullListening
+        self.full_listener = FullListening(self)
 
     def prune(self):
         self.reviews.prune()
@@ -288,6 +291,7 @@ class MediaController:
                 del table[next(iter(table))]
 
     def remember(self, key, info):
+        self.full_listener.replaced(key)
         self.prune()
         self.reviews.rows.pop(key, None)
         self.recent[key] = {'expires': self.clock() + 600, 'info': dict(info)}
@@ -303,6 +307,9 @@ class MediaController:
             if review['result'].get('audio_chunks'):
                 status['听觉进度'] = hearing.coverage(review['result'], review['state'].get('hearing', {}))
             status['可用操作'] = 'video_more：补看本聊天本人尚未查看的采样；缓存自抽取起最多1小时'
+        full = self.full_listener.progress(key)
+        if full:
+            status['完整收听'] = full
         return status
 
     async def download(self, data, info):
@@ -388,6 +395,9 @@ class MediaController:
     async def read(self, data, question='', *, more=False, audio_only=False):
         bot = self.bot
         key = bot._mechanism_key(data)
+        if self.full_listener.running(key):
+            await bot.send_msg_to_user(data, bot.load_config(), '正在自动听完这份媒体；可发“听完进度”或“停止听完”。')
+            return
         self.prune()
         row = self.recent.get(key)
         config = bot.load_config()
@@ -405,6 +415,20 @@ class MediaController:
         audio_allowed = hearing.allowed(bot, config, data.get('group_id'))
         audio_token = hearing.signature(bot, config) if audio_allowed else None
         is_audio = bool(row and (row['info'].get('_kind') == 'record' or Path(name(row['info'])).suffix.lower() in AUDIO_EXTENSIONS))
+        import full_hearing
+        eligible = bool((saved and saved['result'].get('audio_chunks')) or is_audio or
+                        (row and (row['info'].get('_kind') == 'video' or
+                                  Path(name(row['info'])).suffix.lower() in VIDEO_EXTENSIONS)))
+        try:
+            automatic = eligible and full_hearing.enabled(bot)
+        except media_reader.MediaError as exc:
+            await bot.send_msg_to_user(data, config, str(exc))
+            return
+        if automatic:
+            await self.full_listener.start(data, question, include_visual=bool(visual_allowed and not audio_only and
+                (not is_audio or (more and saved and saved['result'].get('frames')))),
+                                           automatic=True)
+            return
         if (is_audio or audio_only) and not audio_allowed:
             await bot.send_msg_to_user(data, config, '当前聊天未启用听觉模型，请配置audio_input或由管理员开启听觉同步。')
             return
@@ -483,8 +507,12 @@ class MediaController:
         self.prune()
         private = data.get('group_id') is None
         raw = data.get('raw_message', '')
-        command = bot._strip_cq_media(bot._strip_at(raw)).strip().translate(str.maketrans('聽頻軌語聲錄這個繼續補', '听频轨语声录这个继续补'))
+        command = bot._strip_cq_media(bot._strip_at(raw)).strip().translate(str.maketrans('聽頻軌語聲錄這個繼續補進暫動視', '听频轨语声录这个继续补进暂动视'))
         mentioned = private or bot._is_mentioned(raw, data.get('message', []))
+        from full_listening import action
+        full_action = action(command)
+        if mentioned and full_action in ('stop', 'status'):
+            return await self.full_listener.control(data, full_action)
         sources = []
         if isinstance(data.get('message'), list):
             sources.extend({**row.get('data', {}), '_kind': 'video'} for row in data['message']
@@ -494,13 +522,19 @@ class MediaController:
         sources.extend(info for info in bot._private_file_segments(data) if supported(info))
         if sources:
             self.remember(key, sources[0])
+            await self.full_listener.settle_replaced(key)
             pending = self.waiting.pop(key, None)
             if not private:
                 bot._get_proactive_mode().observe(data['group_id'], data.get('sender', {}).get('nickname', '群友'),
                     command, bot.load_config(), direct=bool(mentioned or pending), sender_id=data.get('sender', {}).get('user_id'))
             if mentioned or pending:
-                await self.read(data, (pending or {}).get('question') or command, audio_only=bool((pending or {}).get('audio_only')))
+                if (pending or {}).get('full') or full_action == 'start':
+                    await self.full_listener.start(data, (pending or {}).get('question') or command)
+                else:
+                    await self.read(data, (pending or {}).get('question') or command, audio_only=bool((pending or {}).get('audio_only')))
             return True
+        if mentioned and full_action == 'start':
+            return await self.full_listener.control(data, 'start')
         if mentioned and re.fullmatch(r'(?:继续听|繼續聽|继续听音频|继续听视频|补听|補聽)[。！!？?\s]*', command):
             await self.read(data, command, more=True, audio_only=True)
             return True
@@ -555,9 +589,13 @@ def install(bot):
         if key:
             media = controller(bot)
             media.remember(key, info)
+            await media.full_listener.settle_replaced(key)
             pending = media.waiting.pop(key, None)
             if pending:
                 event = {**data, 'message_type': 'group', 'sender': {'user_id': data.get('user_id')}, 'raw_message': ''}
-                await media.read(event, pending.get('question', ''), audio_only=bool(pending.get('audio_only')))
+                if pending.get('full'):
+                    await media.full_listener.start(event, pending.get('question', ''))
+                else:
+                    await media.read(event, pending.get('question', ''), audio_only=bool(pending.get('audio_only')))
         return True
     bot._on_paper_upload = upload

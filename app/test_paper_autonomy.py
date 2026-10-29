@@ -91,7 +91,7 @@ class AutonomyTests(unittest.IsolatedAsyncioTestCase):
         self.discover.assert_not_awaited()
 
     async def test_failed_probability_is_persisted_without_spinning_model(self):
-        self.config["paper_reader"]["auto_read"]["probability"] = 0
+        self.config["paper_reader"]["auto_read"]["probability"] = 0.00000001
         await self.tick()
         first_check = self.reading.groups["123"]["last_check"]
         self.clock += 31

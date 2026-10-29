@@ -13,6 +13,7 @@ META = re.compile(
     r'|\bI (?:need to|must|should) (?:stick to|adhere to|follow)\b.{0,100}\b(?:style|persona|instructions?|rules?|first person)\b'
     r'|\b(?:Let me|I need to) (?:think|analy[sz]e|decide)\b.{0,100}\b(?:reply|respond|response|style|persona)\b'
     r'|\bnot something directed at me\b|\binviting a real response\b'
+    r'|\bI (?:need to|should|must) (?:put together|keep my (?:response|reply)|(?:write|compose|generate|craft) (?:a|an|the))\b.{0,120}\b(?:summary|style|character|persona|reply|response)\b'
     r'|\bno action descriptions\b|\bno addressing by name\b'
     r'|(?:我(?:需要|必须|应该)|首先(?:要|得)).{0,35}(?:遵循|遵守|保持).{0,25}(?:人设|角色设定|输出格式|系统提示|指令要求)'
     r'|(?:这(?:条|是).{0,35}(?:群管家|管理机器人|群管理机器人)).{0,55}(?:不需要我回复|不是对我说|是否回复|要不要回复)'

@@ -6,6 +6,7 @@ import re
 import media_reader
 import qq_media
 from image_network import validate_image_url
+import model_stream
 
 
 def urls(bot, data):
@@ -57,7 +58,7 @@ async def describe(bot, url, config):
             parts.extend([{'type': 'text', 'text': '定位约' + str(frame['second']) + '秒'},
                           {'type': 'image_url', 'image_url': {'url': 'data:' + media_type + ';base64,' + frame['base64']}}])
         client = bot.qwen_vl_client.with_options(max_retries=0, timeout=120)
-        response = await asyncio.wait_for(client.chat.completions.create(model=qv.get('model', 'qwen-vl-plus'),
+        response = await asyncio.wait_for(model_stream.create(client, _stream_log=bot.log, _stream_source='proactive_images_describe', model=qv.get('model', 'qwen-vl-plus'),
             messages=[{'role': 'user', 'content': parts}], max_tokens=1500, temperature=0.2), 120)
         if bot._vision_route_signature(bot.load_config()) != route:
             return None

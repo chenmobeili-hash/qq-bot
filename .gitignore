@@ -65,3 +65,9 @@ venv/
 Thumbs.db
 hearing_sync_state.json
 hearing_sync_state.tmp
+full_hearing_mode.json
+full_hearing_mode.tmp
+
+cognitive_state.sqlite3*
+private_wake_state.json
+private_wake_state.tmp

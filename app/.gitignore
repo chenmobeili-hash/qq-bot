@@ -1,0 +1,52 @@
+bilibili_account.json
+bilibili_*.tmp
+bilibili_actions.json
+bilibili_state.json
+resources/bilibili_tmp/
+backup-bilibili*/
+whale_stickers_state.json
+backup-whale-stickers*/
+
+# Reviewed incremental update backups
+backup-paper-reader-*/
+backup-vm-update-*/
+
+# Autonomous reading state and backups
+paper_reading_state.json
+paper_reading_state.tmp
+backup-auto-reading-*/
+
+# Vision sync and update backups
+vision_sync_state.json
+vision_sync_state.tmp
+backup-mechanism-update-*/
+
+# Resumable reading and private sources
+reading_sessions.json
+reading_sessions.json.*.tmp
+reading_sources/
+vision_image_cache/
+resources/media_tmp/
+autonomous_memory.json
+.autonomous-memory-*.tmp
+
+# Global style enhancement state
+style_enhancement_state.json
+.style-enhancement-*.tmp
+hearing_sync_state.json
+hearing_sync_state.tmp
+full_hearing_mode.json
+full_hearing_mode.tmp
+
+# Private cognitive state
+cognitive_state.sqlite3*
+private_wake_state.json
+private_wake_state.tmp
+friend_requests.sqlite3*
+
+# Private Lens quota; credentials stay in ignored config or environment
+serpapi_lens_state.sqlite3*
+.serpapi-config-*.tmp
+fish_tts.sqlite3*
+tts_cache/
+.fish_audio-config-*.tmp

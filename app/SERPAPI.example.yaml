@@ -1,0 +1,11 @@
+# 将本段合并到你自己的 app/config.yaml 顶层；已存在serpapi时编辑原段，不要重复添加。
+# key只填在自己的配置或环境变量里，不要提交GitHub或聊天。
+serpapi:
+  enabled: true
+  api_key: ""                    # 在这里填你的SerpApi key；不是Serper key。
+  api_key_env: SERPAPI_API_KEY     # api_key为空时，可从同名环境变量读取。
+  hl: zh-cn
+  timeout_seconds: 55
+  daily_limit: 20                 # 本地滚动24小时最多20次尝试，重启不清零。
+  min_interval_seconds: 8
+  proxy: ""                      # 留空跟随bot进程的环境HTTP代理；可填本机HTTP代理入口。

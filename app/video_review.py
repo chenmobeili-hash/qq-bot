@@ -6,6 +6,7 @@ import re
 import time
 
 from media_reader import MediaError
+import model_stream
 
 PAGE_SIZE = 4
 FRAME_LIMIT = 40
@@ -101,7 +102,7 @@ async def _visual_review(bot, result, config, question='', state=None):
         timeout = min(remaining, getattr(bot, 'VISION_TIMEOUT', 180))
         client = bot.qwen_vl_client.with_options(max_retries=0, timeout=timeout)
         try:
-            response = await asyncio.wait_for(client.chat.completions.create(
+            response = await asyncio.wait_for(model_stream.create(client, _stream_log=bot.log, _stream_source='video_review__visual_review', 
                 model=qv.get('model', 'qwen-vl-plus'), messages=[{'role': 'system', 'content': instruction},
                 {'role': 'user', 'content': parts}], max_tokens=2200, temperature=0.2), timeout)
             if bot._vision_route_signature(bot.load_config()) != route:
@@ -134,17 +135,18 @@ async def _visual_review(bot, result, config, question='', state=None):
 
 async def review(bot, result, config, question='', state=None, group=None):
     import hearing
+    import full_hearing
     group = config.get('_media_group') if group is None else group
     state = state if state is not None else {}
     audio, warning = '', ''
     if result.get('audio_chunks'):
         if hearing.allowed(bot, config, group):
             try:
-                audio = await hearing.review(bot, result, config, question, state.setdefault('hearing', {}), group)
+                audio = await full_hearing.review(bot, result, config, question, state.setdefault('hearing', {}), group)
             except asyncio.CancelledError:
                 raise
             except MediaError as exc:
-                if '已变化' in str(exc):
+                if full_hearing.enabled(bot) or '已变化' in str(exc):
                     raise
                 warning = '声音未读取成功：' + str(exc)
     elif result.get('audio_status'):
