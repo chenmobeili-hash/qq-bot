@@ -1,7 +1,5 @@
 # 可选记忆校验与正常回答分离
 
-2026-10-29：依据 VM 调查报告在本地实现相同处理契约；不是复制实际 VM 源码，也不声明源码哈希与 VM 一致。
-
 先校验 JSON 信封、kind/reply/action、操作参数和权限。核心非法照旧拒绝整轮；核心通过后，单独校验可选 memory。memory 任一项非法就整批丢弃，不保留其中的合法项，不写盘；合法回复和原确认流程继续，不追加模型重试。
 
 Decision 新增可选 memory_error=(code,index)。直接调用 validate_ops/commit 仍抛 ValueError 子类 MemoryValidationError，不允许其他调用方绕过校验。诊断只含固定原因码和0起操作位置，批量问题-1，超过3项为3；不记录正文、原始JSON、密钥或其他异常消息。
@@ -16,4 +14,4 @@ Decision 新增可选 memory_error=(code,index)。直接调用 validate_ops/comm
 
 相关回归：python -m unittest test_memory_validation test_long_term_memory test_memory_decay test_model_decision test_decision_json_compat test_model_stream -q
 
-请只运行明确选择的离线测试；不要直接unittest discover，test_send.py有真实QQ连接/发消息副作用。本地离线测试不等于实际VM或真实模型验收。已有VM修复请继续保留，不要为了本地新哈希覆盖VM自定义；流式r1增量包仍不改ask_deepseek、parse、Decision资料类或long_term_memory.py。
+请只运行明确选择的离线测试；不要直接unittest discover，test_send.py有真实QQ连接/发消息副作用。本地离线测试不等于实际部署或真实模型验收。

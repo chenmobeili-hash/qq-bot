@@ -51,7 +51,7 @@ fish_audio:
 
 若失败，文字照常保留；自动语音不反复向群报错，显式试听/朗读会给一次失败提示。发送回执未知时不自动重发，避免重复语音。关闭模式会阻止后续自动调用，在途请求可能已产生用量；删除本地音档不代表删除Fish服务器侧数据。
 
-使用环境HTTP(S)代理（默认）或独立`fish_audio.proxy`，不修改全局代理、图片机场代理、DoH或下载器。证书校验保持开启；代理故障不自动改路绕行。跨进程平台凭证仍由VM原启动环境管理，不写死。
+使用环境HTTP(S)代理（默认）或独立`fish_audio.proxy`，不修改全局代理或其他下载器。证书校验保持开启；代理故障不自动改路绕行。跨进程平台凭证仍由部署环境原有的启动方式管理，不写死。
 
 ## 缓存与隐私
 
@@ -63,6 +63,6 @@ fish_audio:
 
 本地：`python -m unittest test_fish_audio test_fish_tts test_fish_config -q`。使用假key和本地假HTTP服务，包含真实MP3/ffprobe解码以及群聊、私聊、权限、取消、额度、记忆修复兼容测试。不要运行`test_send.py`或无筛选的unittest discover。
 
-实际VM：空闲时仅重启Python bot，保留原QQ/SnowLuma及守护恢复流程。先填key和真实音色ID，管理员私聊发`语音测试`，确认文字→`phase=request_start/headers/first_body/audio_received/audio_validated`→`status=sent`→QQ可播放。再在目标群@bot测试，最后分别开启语音模式，检查主模型只在合适时选择附语音。不要用一行connected或已配置宣称全部验收通过。
+实际部署：空闲时仅重启Python bot，保留原QQ/SnowLuma及守护恢复流程。先填key和真实音色ID，管理员私聊发`语音测试`，确认文字→`phase=request_start/headers/first_body/audio_received/audio_validated`→`status=sent`→QQ可播放。再在目标群@bot测试，最后分别开启语音模式，检查主模型只在合适时选择附语音。不要用一行connected或已配置宣称全部验收通过。
 
-官方依据：[TTS API](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech)、[能力及免费层说明](https://docs.fish.audio/overview/capabilities)。本地没有用户实际key，未进行真实Fish账户、真实QQ或VM验收。
+官方依据：[TTS API](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech)、[能力及免费层说明](https://docs.fish.audio/overview/capabilities)。本地没有用户实际key，未进行真实Fish账户、真实QQ或部署验收。

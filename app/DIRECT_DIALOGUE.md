@@ -22,14 +22,14 @@
 
 附件元数据仅内存保留：每位最多8份、最多64个作用域，过10分钟或进程重启后需重新发送。这个限制不同于已读文档缓存（1小时）及PDF持久阅读游标。接入层以offline_file通知发来的私聊文件也会规范化为私聊附件；接入层仍须提供文件ID、可用URL或base64。只返回机器上的任意文件路径时不直接打开，避免读取bot配置等私人文件。
 
-私聊下载复用生产paper_reader.fetch_bytes及其PublicResolver/DoH补丁，不用旧翻译下载器的8MB上限。文档64MiB、初读前100页窗口/最多12页摘录、解析CPU90秒/墙钟120秒、阅读模型段300秒含原重试均维持现有设定。扫描PDF没有文字层仍不能据此识别所有图片或图表；DOC依赖antiword。代码更新不替换paper_reader.py、image_proxy.py、代理地址、DoH解析器或其他网络补丁。
+私聊下载复用paper_reader.fetch_bytes及其PublicResolver/DoH解析，不用旧翻译下载器的8MB上限。文档64MiB、初读前100页窗口/最多12页摘录、解析CPU90秒/墙钟120秒、阅读模型段300秒含原重试均维持现有设定。扫描PDF没有文字层仍不能据此识别所有图片或图表；DOC依赖antiword。
 
 ## 讨论、续读与精读
 
 私聊“文献追问 问题”“文献状态”“忘记文献”直接作用于本私聊。自然问“这文章怎么样”时可由主模型inspect_current_document取得真实摘录；不会从同QQ所在群取别的文档补齐。私聊也支持“逐页精读”“继续阅读”“暂停阅读”“验收阅读”“阅读进度”，PDF成功初读后保存private_QQ作用域的阅读游标，闲置时继续，打断后沿用已保存进度，结果只发本人私聊。
 
-精读精确笔记仍保留5小时，长期只留下读后感和最多3000字精选记忆；普通长期记忆通道不会替它续期。私聊阅读需paper_reader.enabled、paper_reader.private_enabled（默认true）、deepseek.enabled和trigger_private均允许；与群白名单独立，不借用某个群号。总并发、前台消息优先、定时任务及待确认操作的让出机制沿用现有规则。已下载PDF源文件和reading_sessions.json须在持久盘，VM替换后仍需外部启动bot。
+精读精确笔记仍保留5小时，长期只留下读后感和最多3000字精选记忆；普通长期记忆通道不会替它续期。私聊阅读需paper_reader.enabled、paper_reader.private_enabled（默认true）、deepseek.enabled和trigger_private均允许；与群白名单独立，不借用某个群号。总并发、前台消息优先、定时任务及待确认操作的让出机制沿用现有规则。已下载PDF源文件和reading_sessions.json须在持久盘，部署环境重启或迁移后仍需外部启动bot。
 
-本地离线测试验证请求中确有image_url且历史只有文字、追问复用/到期/路由变化与作用域隔离，并验证私聊真实入口、近期附件定位、翻译优先、失败不记已读、私聊PDF游标恢复。没有在你的VM上联网验收，不能以离线测试代替QQ真实上传和模型图像能力验收。
+本地离线测试验证请求中确有image_url且历史只有文字、追问复用/到期/路由变化与作用域隔离，并验证私聊真实入口、近期附件定位、翻译优先、失败不记已读、私聊PDF游标恢复。没有在你的部署环境中联网验收，不能以离线测试代替QQ真实上传和模型图像能力验收。
 
-回滚注意：生成private_QQ阅读任务后，旧版reading_sessions.py不认识这些作用域。不要只恢复旧代码就继续用新状态；先停止bot并完整备份reading_sessions.json及reading_sources。若确需降级，应另制仅含group任务/对应ignored记录的兼容状态副本供旧程序使用，private任务完整留在原备份以便恢复新版时续接，不能直接删除原状态或用很久以前的状态覆盖。代码安装器回滚不自动改写私人阅读数据。
+回滚注意：生成private_QQ阅读任务后，旧版reading_sessions.py不认识这些作用域。不要只恢复旧代码就继续用新状态；先停止bot并完整备份reading_sessions.json及reading_sources。若确需降级，应另制仅含group任务/对应ignored记录的兼容状态副本供旧程序使用，private任务完整留在原备份以便恢复新版时续接，不能直接删除原状态或用很久以前的状态覆盖。回滚代码不会自动改写私人阅读数据。

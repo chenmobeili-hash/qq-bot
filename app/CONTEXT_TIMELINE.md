@@ -39,13 +39,13 @@
 
 不再要求重启后重新收到一条群消息，也不再因为群安静超过6小时失去阅读资格。仍需本群主动模式、文献开关和白名单允许，需空闲且每日额度足够。检查失败会记具体阶段或类型，未选书、没有未读文件和模型沉默均分别显示。保底保证发起尝试，不能保证下载或模型成功。主模型实际正在处理中时进程被强制替换，该未完成步骤仍需重做；已保存的阅读页码独立恢复。
 
-VM仍须自动恢复bot进程，并把状态文件/阅读来源缓存留在持久盘。Python程序无法在自身已经停止且无外部启动器时继续执行。
+部署环境仍须自动恢复bot进程，并把状态文件/阅读来源缓存留在持久盘。Python程序无法在自身已经停止且无外部启动器时继续执行。
 
 ## SnowLuma原生状态指令
 
-经官方源码核对，OneBot配置的`statusCommand`含enabled/swallow/cooldownSeconds/trigger。VM需备份实际账号的`config/onebot_<uin>.json`并把statusCommand.enabled改为false；不要只改被账号快照覆盖的全局默认，不要改端口、token或networks。可优先用当前版本WebUI保存并读回核验。原生开关关闭后，bot的管理员门禁才有意义；仅修改bot.py不能撤回接入层先发的状态。
+经官方源码核对，OneBot配置的`statusCommand`含enabled/swallow/cooldownSeconds/trigger。部署时需备份实际账号的`config/onebot_<uin>.json`并把statusCommand.enabled改为false；不要只改被账号快照覆盖的全局默认，不要改端口、token或networks。可优先用当前版本WebUI保存并读回核验。原生开关关闭后，bot的管理员门禁才有意义；仅修改bot.py不能撤回接入层先发的状态。
 
-参考：[官方配置源码](https://github.com/SnowLuma/SnowLuma/blob/main/packages/onebot/src/config.ts)、[状态文本源码](https://github.com/SnowLuma/SnowLuma/blob/main/packages/onebot/src/modules/status-command.ts)。不同VM版本需核对字段后修改，不能假定修改本地项目就改变VM设置。
+参考：[官方配置源码](https://github.com/SnowLuma/SnowLuma/blob/main/packages/onebot/src/config.ts)、[状态文本源码](https://github.com/SnowLuma/SnowLuma/blob/main/packages/onebot/src/modules/status-command.ts)。不同SnowLuma版本需核对字段后修改，不能假定修改本项目代码就改变接入层设置。
 
 ## 统一时间线
 
@@ -61,7 +61,7 @@ VM仍须自动恢复bot进程，并把状态文件/阅读来源缓存留在持�
 
 四至六句短回复不再退回一整条，改为按相邻句合并为最多3条；最终总长1200字、单条800字。B站手动总结使用已存在的严格最终台词JSON协议，有一次同预算修复机会；无法校验时不发原始内容。自主B站分享与评论也校验最终文本。新增发送结果日志不记录代理凭证、音频或原始模型推理。
 
-离线回归使用模拟接口，不能据此宣称VM已安装、真实模型支持听觉、QQ已收发成功。网络下载器、DoH、代理和模型配置不在本补丁的修改范围。
+离线回归使用模拟接口，不能据此宣称实际部署已完成、真实模型支持听觉、QQ已收发成功。
 
 ## 自主长期记忆的软遗忘
 

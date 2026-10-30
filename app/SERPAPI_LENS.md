@@ -13,7 +13,7 @@ python -X utf8 configure_serpapi.py --target 实际app目录
 python -X utf8 configure_serpapi.py --target 实际app目录 --apply
 ```
 
-第一条只预览；第二条只在serpapi不存在时追加key留空的配置，原文件逐字节备份到backup-vm-update-lens-config-*，不重排或改写原字段。已有serpapi时保持原段，提示你编辑，不能自动覆盖已有key/代理。安装代码的apply_wake.py不会替你填key。
+第一条只预览；第二条只在serpapi不存在时追加key留空的配置，原文件逐字节备份到backup-vm-update-lens-config-*，不重排或改写原字段。已有serpapi时保持原段，提示你编辑，不能自动覆盖已有key/代理。该脚本不会替你填key。
 
 ```yaml
 serpapi:
@@ -27,9 +27,9 @@ serpapi:
   proxy: ""
 ```
 
-api_key留空时可从bot同进程环境变量SERPAPI_API_KEY读取；配置中的非空key优先。不要把key发群、写进模型提示词、更新包或公开仓库。对config.yaml或环境变量的改变在下一请求读取；仅改key通常不需重启，而首次安装Python代码仍需按说明重启bot.py。公开示例默认enabled=false；本地新增空段enabled=true，但key为空且环境变量不存在时仍不可调用Lens。
+api_key留空时可从bot同进程环境变量SERPAPI_API_KEY读取；配置中的非空key优先。不要把key发群、写进模型提示词或公开仓库。对config.yaml或环境变量的改变在下一请求读取；仅改key通常不需重启，而首次启用该功能仍需重启bot.py。公开示例默认enabled=false；本地新增空段enabled=true，但key为空且环境变量不存在时仍不可调用Lens。
 
-proxy留空时使用bot进程的环境HTTP代理；可填写本机HTTP代理入口，只影响SerpApi上传/查询/账号检查，不修改图片下载机场、DoH、QQ连接或其它流量。它不是新的机场节点配置，不能把VLESS订阅或SOCKS地址直接当HTTP代理填写。
+proxy留空时使用bot进程的环境HTTP代理；可填写本机HTTP代理入口，只影响SerpApi上传/查询/账号检查，不修改图片下载代理、DoH、QQ连接或其它流量。它不是代理节点订阅配置，不能把VLESS订阅或SOCKS地址直接当HTTP代理填写。
 
 ## 使用方式
 
@@ -41,7 +41,7 @@ proxy留空时使用bot进程的环境HTTP代理；可填写本机HTTP代理入�
 
 Lens返回的是相关网页或视觉相似线索，不能直接等同确定角色/作品，更不能据此编造集数时间点。结果只给主模型有界的标题、来源、网页链接和匹配类型，不自动抓缩略图，不把搜索参数里的key、image_id、账号邮箱、原始HTML或响应体交给模型。保留外部数据仅作资料的协议。
 
-## VM上先检查哪一步
+## 部署后先检查哪一步
 
 在运行bot的同一环境、同一代理出口执行：
 
@@ -51,7 +51,7 @@ python -X utf8 serpapi_lens.py --root 实际app目录 --check
 
 只请求SerpApi账号接口，不上传图片、不启动图片搜索；输出只含状态和可用查询余额，不回显key或邮箱。失败时返回非零退出码。status=ok仅说明这个出口的账号接口和凭证可用，不能替代图片上传及Lens查询验收。先前注册页面被block和API状态分开判断：401记authentication，403记access_denied，402/429记provider_limit，不仅凭403断言key无效。
 
-完整验收要发一张新图，要求用谷歌搜图；核查[LENS]阶段日志和search_image provider=lens的调用、实际候选网页及最后回答。不能只看模型说“谷歌搜到了”。没有真实key时本地只做离线模拟，不谎称VM出口或真实服务通过。
+完整验收要发一张新图，要求用谷歌搜图；核查[LENS]阶段日志和search_image provider=lens的调用、实际候选网页及最后回答。不能只看模型说“谷歌搜到了”。没有真实key时本地只做离线模拟，不谎称部署出口或真实服务通过。
 
 ## 超时、额度与状态
 
@@ -59,4 +59,4 @@ prepare、quota、upload、search、complete分阶段，只记录阶段与枚举
 
 默认滚动24小时最多20次本地预留，同一实例至少间隔8秒；失败也消耗本地预留，防止出口故障时反复烧额度。计数保存到私有serpapi_lens_state.sqlite3，重启不清零；已加入.gitignore。该本地保护不等于服务商月额度，真实余额仍以账号为准。daily_limit可改0暂停Lens请求，原SauceNAO独立。
 
-部署保留原saucenao、Serper、下载器、DoH和机场代理；不自动开启其他群功能。代码回滚不删除私人配额或记忆。若要撤销追加的空serpapi段，编辑该段或按私人备份核对，不能用旧配置覆盖期间其他新设置。
+启用Lens不改变原saucenao、Serper、下载器、DoH和图片下载代理设置；不自动开启其他群功能。代码回滚不删除私人配额或记忆。若要撤销追加的空serpapi段，编辑该段或按私人备份核对，不能用旧配置覆盖期间其他新设置。

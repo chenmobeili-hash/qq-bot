@@ -47,7 +47,7 @@ audio_input:
 
 QQ 语音尝试通过接入层 `get_record` 请求转成 MP3，支持返回 URL 或 Base64。若接入层只返回本地路径，管理员需把**真实转码缓存目录**加入 `audio_input.local_record_roots`；不默认开放整个磁盘，也不打开消息任意指定的本地文件。SILK 仍无法解码、接口未实现或本机没有同一份文件时，会提示改发普通音频。
 
-该接口的规范见 [OneBot 11 公开 API](https://github.com/botuniverse/onebot-11/blob/master/api/public.md)。具体 SnowLuma 版本是否实现转码与落盘路径需要在 VM 验收，不能用模拟测试代替。
+该接口的规范见 [OneBot 11 公开 API](https://github.com/botuniverse/onebot-11/blob/master/api/public.md)。具体 SnowLuma 版本是否实现转码与落盘路径需要在实际部署中验收，不能用模拟测试代替。
 
 B站取得可下载的单段媒体流后，在原下载中一并提取音轨；不重复下载同一流。没有音轨、只有字幕、取流失败或单独音频流未支持时如实说明。听觉开关不会改变原有点赞评论权限或网络代理配置。
 

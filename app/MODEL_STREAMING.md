@@ -26,10 +26,8 @@
 
 流式可能减少代理长时间没有正文数据导致的断连；如果服务商本来就不支持流式、代理缓存整个响应，或模型迟迟不出首段，它不能保证提速，更不能修复模型服务本身的故障。流式不会保证更省 token；失败后的操作级重试仍可能计费。
 
-更新包只合并模型请求相关函数与新增 import，不覆盖 VM 的 paper_reader.py、图片机场代理、DoH 配置、私人配置、人格及记忆。qq_media.py 只合并 describe_frames，其他下载函数保留。未知函数差异会停下，禁止为了安装而整文件覆盖网络补丁。
+离线测试：`python -m unittest test_model_stream test_model_decision test_reading_retry -q`。测试使用假密钥及 httpx.MockTransport，涵盖真实 SDK 的 SSE 字节拆分、中文、网关直接回 JSON、断流、取消、原图/音频参数和阅读页码不前移；不是实际部署/真实模型验收。
 
-离线测试：`python -m unittest test_model_stream test_model_decision test_reading_retry -q`。测试使用假密钥及 httpx.MockTransport，涵盖真实 SDK 的 SSE 字节拆分、中文、网关直接回 JSON、断流、取消、原图/音频参数和阅读页码不前移；不是 VM/真实模型验收。
-
-VM 安装后先只发一句普通聊天，查看 first_chunk/first_text/complete 和完整回复；再验自然语言操作的原确认流程、图片及一次续读。对照同一模型、相近输入的首字/总耗时和失败次数，才能判断该上游是否受益。部署者检查在途任务、空闲时仅重启 bot.py，不必重启 QQ/SnowLuma。
+部署后先只发一句普通聊天，查看 first_chunk/first_text/complete 和完整回复；再验自然语言操作的原确认流程、图片及一次续读。对照同一模型、相近输入的首字/总耗时和失败次数，才能判断该上游是否受益。部署者检查在途任务、空闲时仅重启 bot.py，不必重启 QQ/SnowLuma。
 
 协议参考：[OpenAI Streaming API responses](https://developers.openai.com/api/docs/guides/streaming-responses)。
