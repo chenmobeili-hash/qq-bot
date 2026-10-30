@@ -1,36 +1,21 @@
 # Google AI Studio 音频模型配置
 
-本次只增加模型池选项，不自动切换主模型、视觉模型、听觉模型或听觉同步。
+`app/config.example.yaml` 的 `llm_providers` 里提供了 `google_ai_studio` 示例，把几个支持音频输入的模型加入主模型池，供“选择听觉模型”独立选用。本文只对应该示例，不涉及任何私有部署的提供方或配置。
 
-- a6api：追加 `gemini-3.8-flash`，沿用已有 a6api 接口和密钥；没有实测中转是否开放音频。
-- google_ai_studio：直连 Google 官方 OpenAI 兼容接口，密钥初始留空。
-- Google模型：`gemini-3.8-flash`、`gemini-3.5-flash-lite`、`gemini-3.6-flash`、`gemini-4-argon`。
-- 四款官方规格均列出Audio输入；不添加比3.5 Flash-Lite更老的型号，也不混入需要Live或TTS专用协议的模型。
+- google_ai_studio：直连 Google 官方 OpenAI 兼容接口，示例中 `enabled: false`、密钥留空。
+- 示例模型：`gemini-3.8-flash`、`gemini-3.5-flash-lite`、`gemini-3.6-flash`、`gemini-4-argon`。
+- 四款官方规格均列出 Audio 输入；列表不是能力认证，也没有混入需要 Live 或 TTS 专用协议的模型。
 
 ## 填写密钥和使用
 
-在app/config.yaml的llm_providers.google_ai_studio.api_key填写你自己的Google AI Studio密钥。
-本地配置中该提供方enabled=true，菜单可见；密钥未填时独立听觉选择会提示接口/密钥缺失。
-公开版config.example.yaml保持enabled=false；复制示例时请填写密钥并自行启用。
-官方兼容地址：https://generativelanguage.googleapis.com/v1beta/openai/
+1. 复制 `app/config.example.yaml` 为 `app/config.yaml`。
+2. 在 `llm_providers.google_ai_studio` 下填写你自己的 Google AI Studio 密钥（`api_key`），并把 `enabled` 改为 `true`。
+3. 官方兼容地址：https://generativelanguage.googleapis.com/v1beta/openai/
+4. 在群中@机器人或私聊发送“选择听觉模型”，选择 `google_ai_studio`，再选模型。建议先选 `gemini-3.8-flash`，用 10–20 秒普通 MP3 验收。
 
-然后在群中@机器人或私聊发送“选择听觉模型”，选择google_ai_studio，再选模型。
-建议先选gemini-3.8-flash，用10–20秒普通MP3验收。
-选定仅影响听觉，主模型不变；开启听觉同步会改为跟随主模型。
-配置文件每次请求重新加载，填Key不需要重启；如果VM尚未安装听觉功能及独立选择菜单，需先安装前两个功能包并只重启bot.py。
-只加模型名不等于已验证调用；账号权限、地区、额度及中转音频格式仍以真实调用为准。
+选定仅影响听觉，主模型不变；开启听觉同步会改为跟随主模型。配置文件每次请求重新加载，填 Key 不需要重启。密钥未填或提供方未启用时，独立听觉选择会提示接口/密钥缺失。
 
-## VM仅合并配置
-
-不要把本地config.yaml或其备份发到VM，也不要覆盖VM生产配置。
-解压本配置包，使用bot自己的Python环境执行：
-
-python add_google_audio_models.py --target /实际/app目录
-python add_google_audio_models.py --target /实际/app目录 --apply
-
-脚本只给a6api追加一个模型，并新增google_ai_studio提供方；若该提供方已经存在则保留已有密钥及启用状态，仅补模型。
-不改当前提供方/模型、不改其他配置，保留注释和原换行，自动备份config.yaml。
-不重启服务、不发联网请求；该包不含任何API密钥、原生产配置或聊天记录，也不包含bot.py及文献下载器。
+只加模型名不等于已验证调用；账号权限、地区、额度及中转音频格式仍以真实调用为准。如果你用的是第三方中转而不是 Google 官方接口，请自行在 `llm_providers` 中新增提供方，并确认它支持 `input_audio`。
 
 ## 官方依据（2026-10-25核对）
 
